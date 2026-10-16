@@ -7,9 +7,9 @@ export const BOOT_ID = 'bpr-boot';
 export const BOOT_STYLE_ID = 'bpr-boot-style';
 export const SETTINGS_LS_KEY = 'bpr_settings';
 
-export function readMirroredSettings(): Record<string, boolean> {
+export function readMirroredSettings(): Record<string, unknown> {
   try {
-    return JSON.parse(localStorage.getItem(SETTINGS_LS_KEY) || '{}');
+    return JSON.parse(localStorage.getItem(SETTINGS_LS_KEY) || '{}') as Record<string, unknown>;
   } catch {
     return {};
   }

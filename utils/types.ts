@@ -1,5 +1,15 @@
 /** 共享类型定义 */
 
+/** 用户 pin 到侧栏的自定义频道 */
+export interface PinnedChannel {
+  id: string;
+  kind: 'pgc' | 'region';
+  name: string;
+  /** pgc: slug（anime/tv/…）；region: rid */
+  ref: string;
+  icon?: string;
+}
+
 export type VideoRef =
   | { kind: 'ep'; id: string }
   | { kind: 'ss'; id: string };

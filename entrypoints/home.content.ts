@@ -1,7 +1,7 @@
 import { defineContentScript } from '#imports';
 import { createHome, type HomeController } from '../utils/home-view';
 import { removeBootAll } from '../utils/boot';
-import type { RpcRequest } from '../utils/types';
+import type { PinnedChannel, RpcRequest } from '../utils/types';
 
 /**
  * 首页重构（主世界）。
@@ -22,6 +22,7 @@ export default defineContentScript({
 
     let home: HomeController | null = null;
     let enabled = false;
+    let pinnedChannels: PinnedChannel[] = [];
 
     const teardown = () => {
       home?.deactivate();
@@ -36,6 +37,7 @@ export default defineContentScript({
       }
       if (!home) {
         home = createHome(); // 立即注入「我的首页」小入口
+        home.setPinned(pinnedChannels);
         console.log('[bpr-home] controller ready on', location.pathname);
       }
     };
@@ -54,7 +56,12 @@ export default defineContentScript({
       if (ev.source !== window) return;
       const d = ev.data as RpcRequest | undefined;
       if (!d || d.__bpr !== 'req' || d.cmd !== 'settings') return;
-      enabled = !!(d.payload as { homepageEnabled?: boolean } | undefined)?.homepageEnabled;
+      const payload = d.payload as
+        | { homepageEnabled?: boolean; pinnedChannels?: PinnedChannel[] }
+        | undefined;
+      enabled = !!payload?.homepageEnabled;
+      pinnedChannels = Array.isArray(payload?.pinnedChannels) ? payload!.pinnedChannels! : [];
+      home?.setPinned(pinnedChannels);
       console.log('[bpr-home] settings, homepageEnabled =', enabled, '| isHome =', isHome());
       apply();
     });

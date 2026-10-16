@@ -90,7 +90,7 @@ npm run zip        # 打包发布 zip
 | 电视剧 | `pgc/season/index/result?season_type=5`（同 `/tv/`） | page 翻页 |
 | 纪录片 | `pgc/season/index/result?season_type=3`（同 `/documentary/`） | page 翻页 |
 | 电影 | `pgc/season/index/result?season_type=2`（同 `/movie/`） | page 翻页 |
-| 游戏 | `x/web-interface/ranking/v2?rid=4&type=all`（游戏区排行） | 无 |
+| 游戏 | `x/web-interface/ranking/v2?rid=4&type=all`（需 WBI） | 无 |
 | 个人中心 | `x/web-interface/nav` + `x/relation/stat` | 无（账号资料 + 快捷入口） |
 | 历史记录 | `x/web-interface/history/cursor` | `max`/`view_at` 游标 |
 | 消息 | `x/msgfeed/unread` + `reply/at/like` | 未读角标 + 最近消息 |
@@ -104,6 +104,10 @@ npm run zip        # 打包发布 zip
 > 每个频道顶部还叠加了专题页版式（`pgc/page/web/v2|v3`）：**热播榜**（`web_rank_*`，带名次/评分）
 > 与**专题/推荐**（`web_column`，无专题时回退 `web_hot`），同样是横向可展开的一排。
 > 「动画」额外有 **新番时间表**（`pgc/web/timeline?types=1`）：7 天日期 tab + 当日剧集横排。
+>
+> **已固定频道**：侧栏「添加频道」可把任意专题频道（`pgc/page/web/v2|v3`）
+> 或 UGC 分区（`ranking/v2?rid=`，需 WBI）固定成独立频道，支持上移/下移/移除；
+> 列表存 `storage.local`，随设置同步。
 
 ### 卡片操作（关注 / 取关 / 拉黑）
 

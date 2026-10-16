@@ -1,5 +1,6 @@
 import { iconSvg } from './icons';
-import { removeBootAll, removeBootOverlay } from './boot';
+import { readMirroredSettings, removeBootAll, removeBootOverlay } from './boot';
+import type { PinnedChannel } from './types';
 import {
   fmtAgo,
   fmtCount,
@@ -13,6 +14,7 @@ import {
   getMessageCounts,
   getMessages,
   getRecommend,
+  getRegionRank,
   getRelationAttrs,
   getSelfProfile,
   getTimeline,
@@ -30,7 +32,8 @@ import {
 
 const TAG = '[bpr-home]';
 
-type SecKey =
+/** 内置（固定）频道 key；自定义 pin 用 `pin:<id>` */
+type StaticKey =
   | 'recommend'
   | 'follow'
   | 'toview'
@@ -42,8 +45,10 @@ type SecKey =
   | 'history'
   | 'message'
   | 'profile';
+type PinKey = `pin:${string}`;
+type SecKey = StaticKey | PinKey;
 
-const SECTIONS: { key: SecKey; label: string; icon: string; group?: string }[] = [
+const SECTIONS: { key: StaticKey; label: string; icon: string; group?: string }[] = [
   { key: 'recommend', label: '推荐', icon: 'recommend' },
   { key: 'follow', label: '关注', icon: 'subscriptions' },
   { key: 'toview', label: '稍后再看', icon: 'schedule' },
@@ -62,17 +67,66 @@ const SECTIONS: { key: SecKey; label: string; icon: string; group?: string }[] =
  * seasonType 见 `pgc/season/index/result`；followType 见 `x/space/bangumi/follow/list`
  * （该接口只接受 1=番剧 / 2=电视剧，故纪录片/电影不做“追”列表）。
  */
-const PGC: Partial<
-  Record<
-    SecKey,
-    { seasonType: number; followType?: 1 | 2; followTitle?: string; page: string; v3?: boolean; timeline?: string }
-  >
-> = {
+type PgcCfg = {
+  seasonType: number;
+  followType?: 1 | 2;
+  followTitle?: string;
+  page: string;
+  v3?: boolean;
+  timeline?: string;
+};
+
+const PGC: Partial<Record<StaticKey, PgcCfg>> = {
   anime: { seasonType: 1, followType: 1, followTitle: '我的追番', page: 'anime', v3: true, timeline: '1' },
   tv: { seasonType: 5, followType: 2, followTitle: '我的追剧', page: 'tv' },
   doc: { seasonType: 3, page: 'documentary' },
   movie: { seasonType: 2, page: 'movie' },
 };
+
+/** 可 pin 的专题频道（PGC slug） */
+const PGC_PRESETS: Record<
+  string,
+  { name: string; seasonType: number; v3?: boolean; timeline?: string; followType?: 1 | 2; icon: string }
+> = {
+  anime: { name: '动画', seasonType: 1, v3: true, timeline: '1', icon: 'movie' },
+  guochuang: { name: '国创', seasonType: 4, v3: true, icon: 'movie' },
+  tv: { name: '电视剧', seasonType: 5, icon: 'live-tv' },
+  movie: { name: '电影', seasonType: 2, icon: 'theaters' },
+  documentary: { name: '纪录片', seasonType: 3, icon: 'videocam' },
+  variety: { name: '综艺', seasonType: 7, icon: 'live-tv' },
+};
+
+/** 可 pin 的 UGC 分区（rid） */
+const REGION_PRESETS: { rid: number; name: string }[] = [
+  { rid: 4, name: '游戏' },
+  { rid: 36, name: '知识' },
+  { rid: 3, name: '音乐' },
+  { rid: 129, name: '舞蹈' },
+  { rid: 188, name: '科技' },
+  { rid: 160, name: '生活' },
+  { rid: 211, name: '美食' },
+  { rid: 119, name: '鬼畜' },
+  { rid: 5, name: '娱乐' },
+  { rid: 181, name: '影视' },
+];
+
+const esc = (s: string): string =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c));
+
+function sanitizePins(v: unknown): PinnedChannel[] {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set<string>();
+  const out: PinnedChannel[] = [];
+  for (const raw of v) {
+    const x = raw as Partial<PinnedChannel> | null;
+    if (!x || typeof x.id !== 'string' || typeof x.ref !== 'string') continue;
+    if (x.kind !== 'pgc' && x.kind !== 'region') continue;
+    if (seen.has(x.id)) continue;
+    seen.add(x.id);
+    out.push({ id: x.id, kind: x.kind, name: String(x.name ?? ''), ref: x.ref, icon: x.icon });
+  }
+  return out;
+}
 
 /* ------------------------- 设计令牌 -------------------------
  * 画布白 + 墨黑文字 + 品牌粉作唯一强调色；用细线而非卡片阴影；
@@ -108,6 +162,37 @@ const VIEW_CSS = `
   .side-foot button { display: flex; align-items: center; gap: 13px; border: none; background: transparent;
     color: #6b7178; font-size: 13px; padding: 0 12px; height: 38px; border-radius: 8px; cursor: pointer; text-align: left; }
   .side-foot button:hover { background: #f5f6f8; color: #0f1115; }
+
+  /* 自定义固定频道 */
+  .nav-row { position: relative; }
+  .nav-row > button { width: 100%; padding-right: 68px; }
+  .pin-ops { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; gap: 2px; }
+  .nav-row:hover .pin-ops { display: flex; }
+  .pin-ops button { width: 22px; height: 22px; border: none; border-radius: 6px; background: #eceef1; color: #3d4148;
+    font-size: 12px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .pin-ops button:hover { background: #fb7299; color: #fff; }
+  .nav .ico .ini { width: 20px; height: 20px; border-radius: 6px; background: #fb7299; color: #fff; font-size: 11px;
+    font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .nav button.nav-add { margin-top: 6px; color: #9aa0a8; }
+  .nav button.nav-add:hover { color: #0f1115; }
+
+  /* 添加频道弹窗 */
+  .modal-ov { position: fixed; inset: 0; z-index: 2147483600; background: rgba(15,17,21,.42);
+    display: flex; align-items: center; justify-content: center; }
+  .modal { width: 520px; max-width: calc(100vw - 40px); max-height: 76vh; overflow: hidden; background: #fff;
+    border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,.24); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid #eef0f2; }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 650; }
+  .modal-x { border: none; background: transparent; font-size: 16px; color: #6b7178; cursor: pointer; }
+  .modal-body { padding: 14px 18px 20px; overflow-y: auto; }
+  .modal-sub { font-size: 12px; font-weight: 600; color: #9aa0a8; margin: 10px 0 8px; }
+  .pin-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .pin-choice { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #eef0f2;
+    background: #fff; border-radius: 9px; padding: 10px 12px; font-size: 13px; color: #0f1115; cursor: pointer; text-align: left; }
+  .pin-choice:hover { border-color: #e0e2e6; background: #fafbfc; }
+  .pin-choice.on { border-color: #fb7299; background: #fff5f8; }
+  .pin-choice .mark { font-size: 11px; color: #7c828c; }
+  .pin-choice.on .mark { color: #fb7299; font-weight: 600; }
 
   /* 主区 */
   .main { flex: 1; min-width: 0; padding: 16px 32px 80px; }
@@ -284,6 +369,7 @@ export interface HomeController {
   activate(): Promise<void>;
   deactivate(): void;
   isActive(): boolean;
+  setPinned(list: PinnedChannel[]): void;
 }
 
 interface SecState {
@@ -385,6 +471,8 @@ export function createHome(): HomeController {
   let msgCounts: MsgCounts | null = null;
   let msgItems: MsgItem[] = [];
   let profile: ProfileData | null = null;
+  let pinned: PinnedChannel[] = sanitizePins(readMirroredSettings().pinnedChannels);
+  let dialogEl: HTMLElement | null = null;
   const expanded = new Set<string>();
   /** mid -> relation.attribute（0 未关注 / 1 悄悄 / 2 单向 / 6 互关 / 128 拉黑） */
   const relations = new Map<number, number>();
@@ -646,7 +734,7 @@ export function createHome(): HomeController {
   function followBlock(st: SecState): HTMLElement {
     const upd = st.follow.filter((c) => c.pinned).length;
     return rowBlock(
-      PGC[sec]?.followTitle ?? '我的追番',
+      PGC[sec as StaticKey]?.followTitle ?? '我的追番',
       st.follow,
       'follow',
       upd ? `${upd} 部有更新` : undefined,
@@ -687,7 +775,7 @@ export function createHome(): HomeController {
 
   function renderGrid(st: SecState) {
     if (!contentEl) return;
-    if (titleEl) titleEl.textContent = SECTIONS.find((x) => x.key === sec)!.label;
+    if (titleEl) titleEl.textContent = labelOf(sec);
     if (countEl) countEl.textContent = st.items.length ? `${st.items.length} 个视频` : '';
     contentEl.innerHTML = '';
 
@@ -714,7 +802,7 @@ export function createHome(): HomeController {
       return;
     }
 
-    if (PGC[sec]?.followType && st.follow.length) {
+    if (st.follow.length) {
       contentEl.appendChild(followBlock(st));
     }
     if (st.rank.length) contentEl.appendChild(rowBlock(st.rankTitle || '热播榜', st.rank, 'rank'));
@@ -1122,8 +1210,60 @@ export function createHome(): HomeController {
     }
   }
   /* ---------------- 数据加载 ---------------- */
+  async function loadPgcInto(st: SecState, cfg: PgcCfg, reset: boolean) {
+    if (!reset) {
+      const idx = await getBangumiIndex(cfg.seasonType, st.page);
+      st.items.push(...idx.items);
+      st.hasMore = idx.hasMore;
+      st.page += 1;
+      return;
+    }
+    const followP: Promise<{ items: Card[] }> = cfg.followType
+      ? getBangumiFollow(cfg.followType, 1).catch(() => ({ items: [] as Card[] }))
+      : Promise.resolve({ items: [] as Card[] });
+    const timelineP: Promise<TimelineDay[]> = cfg.timeline
+      ? getTimeline(cfg.timeline).catch(() => [] as TimelineDay[])
+      : Promise.resolve([] as TimelineDay[]);
+    const [follow, idx, mods, timeline] = await Promise.all([
+      followP,
+      getBangumiIndex(cfg.seasonType, 1),
+      getChannelModules(cfg.page, cfg.v3).catch(() => ({
+        rankTitle: '',
+        rank: [] as Card[],
+        columnTitle: '',
+        column: [] as Card[],
+      })),
+      timelineP,
+    ]);
+    st.follow = follow.items;
+    st.items = idx.items;
+    st.hasMore = idx.hasMore;
+    st.rank = mods.rank;
+    st.rankTitle = mods.rankTitle;
+    st.column = mods.column;
+    st.columnTitle = mods.columnTitle;
+    st.timeline = timeline;
+    st.page = 2;
+  }
+
+  async function loadPinInto(st: SecState, p: PinnedChannel, reset: boolean) {
+    if (p.kind === 'region') {
+      if (!reset) return;
+      st.items = await getRegionRank(Number(p.ref));
+      st.hasMore = false;
+      return;
+    }
+    const preset = PGC_PRESETS[p.ref];
+    if (!preset) throw new Error('未知频道');
+    await loadPgcInto(
+      st,
+      { seasonType: preset.seasonType, page: p.ref, v3: preset.v3, timeline: preset.timeline, followType: preset.followType },
+      reset,
+    );
+  }
+
   async function loadSec(key: SecKey, reset: boolean) {
-    const st = states.get(key)!;
+    const st = ensureState(key);
     if (st.loading) return;
     if (reset) {
       // SWR：保留已有内容用于即时渲染，成功后再替换；仅重置分页游标
@@ -1155,41 +1295,12 @@ export function createHome(): HomeController {
       } else if (key === 'toview') {
         st.hasMore = false;
         if (reset) st.items = await getWatchLater();
-      } else if (PGC[key]) {
-        const cfg = PGC[key]!;
-        if (reset) {
-          const followP: Promise<{ items: Card[] }> = cfg.followType
-            ? getBangumiFollow(cfg.followType, 1).catch(() => ({ items: [] as Card[] }))
-            : Promise.resolve({ items: [] as Card[] });
-          const timelineP: Promise<TimelineDay[]> = cfg.timeline
-            ? getTimeline(cfg.timeline).catch(() => [] as TimelineDay[])
-            : Promise.resolve([] as TimelineDay[]);
-          const [follow, idx, mods, timeline] = await Promise.all([
-            followP,
-            getBangumiIndex(cfg.seasonType, 1),
-            getChannelModules(cfg.page, cfg.v3).catch(() => ({
-              rankTitle: '',
-              rank: [] as Card[],
-              columnTitle: '',
-              column: [] as Card[],
-            })),
-            timelineP,
-          ]);
-          st.follow = follow.items;
-          st.items = idx.items;
-          st.hasMore = idx.hasMore;
-          st.rank = mods.rank;
-          st.rankTitle = mods.rankTitle;
-          st.column = mods.column;
-          st.columnTitle = mods.columnTitle;
-          st.timeline = timeline;
-          st.page = 2;
-        } else {
-          const idx = await getBangumiIndex(cfg.seasonType, st.page);
-          st.items.push(...idx.items);
-          st.hasMore = idx.hasMore;
-          st.page += 1;
-        }
+      } else if (key.startsWith('pin:')) {
+        const p = pinned.find((x) => `pin:${x.id}` === key);
+        if (!p) throw new Error('频道已移除');
+        await loadPinInto(st, p, reset);
+      } else if (PGC[key as StaticKey]) {
+        await loadPgcInto(st, PGC[key as StaticKey]!, reset);
       } else if (key === 'game') {
         if (reset) {
           const p = await getGameFeed();
@@ -1239,8 +1350,8 @@ export function createHome(): HomeController {
     ssSet(K_SECTION, key);
     if (!sh) return;
     sh.querySelectorAll('[data-sec]').forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.sec === key));
-    if (titleEl) titleEl.textContent = SECTIONS.find((x) => x.key === key)!.label;
-    const st = states.get(key)!;
+    if (titleEl) titleEl.textContent = labelOf(key);
+    const st = ensureState(key);
     // 先用现有内容即时渲染，再后台刷新（SWR）；无内容时交给 loadSec 显示骨架屏
     if (key === 'message') {
       if (st.loaded || msgItems.length) renderMessages();
@@ -1252,6 +1363,213 @@ export function createHome(): HomeController {
     if (!st.loading) void loadSec(key, true);
     // 不保留滚动：切栏和返回都回到顶部
     window.scrollTo(0, 0);
+  }
+
+  /* ---------------- 自定义固定频道 ---------------- */
+  const navKeys = (): SecKey[] => [
+    ...SECTIONS.map((s) => s.key),
+    ...pinned.map((p) => `pin:${p.id}` as SecKey),
+  ];
+
+  function ensureState(key: SecKey): SecState {
+    let st = states.get(key);
+    if (!st) {
+      st = newState();
+      states.set(key, st);
+    }
+    return st;
+  }
+
+  function labelOf(key: SecKey): string {
+    const s = SECTIONS.find((x) => x.key === key);
+    if (s) return s.label;
+    const p = pinned.find((x) => `pin:${x.id}` === key);
+    return p?.name ?? '频道';
+  }
+
+  function renderNav() {
+    const nav = sh?.querySelector('.nav') as HTMLElement | null;
+    if (!nav) return;
+    nav.innerHTML = '';
+    let lastGroup = '';
+    for (const s of SECTIONS) {
+      if (s.group && s.group !== lastGroup) {
+        const g = document.createElement('div');
+        g.className = 'nav-group';
+        g.textContent = s.group;
+        nav.appendChild(g);
+        lastGroup = s.group;
+      }
+      nav.appendChild(navItem(s.key, s.label, s.icon));
+    }
+    if (pinned.length) {
+      const g = document.createElement('div');
+      g.className = 'nav-group';
+      g.textContent = '已固定';
+      nav.appendChild(g);
+      pinned.forEach((p) => nav.appendChild(pinItem(p)));
+    }
+    const add = document.createElement('button');
+    add.className = 'nav-add';
+    add.innerHTML = `<span class="ico">${iconSvg('open-in-new', 18)}</span><span>添加频道</span>`;
+    add.addEventListener('click', openPinDialog);
+    nav.appendChild(add);
+    updateBadge();
+  }
+
+  function navItem(key: SecKey, label: string, icon: string): HTMLElement {
+    const b = document.createElement('button');
+    b.dataset.sec = key;
+    if (key === sec) b.classList.add('active');
+    b.innerHTML = `<span class="ico">${iconSvg(icon, 20)}</span><span>${esc(label)}</span><span class="badge" style="display:none"></span>`;
+    b.addEventListener('click', () => selectSec(key));
+    return b;
+  }
+
+  function pinItem(p: PinnedChannel): HTMLElement {
+    const key: SecKey = `pin:${p.id}`;
+    const row = document.createElement('div');
+    row.className = 'nav-row';
+    const b = document.createElement('button');
+    b.dataset.sec = key;
+    if (key === sec) b.classList.add('active');
+    const svg = p.icon ? iconSvg(p.icon, 20) : '';
+    const ico = svg || `<span class="ini">${esc((p.name || '?').slice(0, 1))}</span>`;
+    b.innerHTML = `<span class="ico">${ico}</span><span>${esc(p.name)}</span>`;
+    b.addEventListener('click', () => selectSec(key));
+    row.appendChild(b);
+
+    const ops = document.createElement('span');
+    ops.className = 'pin-ops';
+    const mk = (txt: string, title: string, fn: () => void) => {
+      const o = document.createElement('button');
+      o.textContent = txt;
+      o.title = title;
+      o.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        fn();
+      });
+      ops.appendChild(o);
+    };
+    mk('↑', '上移', () => movePin(p.id, -1));
+    mk('↓', '下移', () => movePin(p.id, 1));
+    mk('×', '移除', () => removePin(p.id));
+    row.appendChild(ops);
+    return row;
+  }
+
+  function persistPins() {
+    postSetting('pinnedChannels', pinned);
+  }
+
+  function setPinned(list: PinnedChannel[]) {
+    pinned = sanitizePins(list);
+    for (const p of pinned) ensureState(`pin:${p.id}` as SecKey);
+    if (active) {
+      renderNav();
+      if (!navKeys().includes(sec)) selectSec('follow');
+    }
+  }
+
+  function addPin(p: PinnedChannel) {
+    if (pinned.some((x) => x.id === p.id)) return;
+    pinned = [...pinned, p];
+    persistPins();
+    ensureState(`pin:${p.id}` as SecKey);
+    renderNav();
+    refreshPinDialog();
+  }
+
+  function removePin(id: string) {
+    const key: SecKey = `pin:${id}`;
+    pinned = pinned.filter((p) => p.id !== id);
+    states.delete(key);
+    persistPins();
+    renderNav();
+    if (sec === key) selectSec('follow');
+    refreshPinDialog();
+  }
+
+  function movePin(id: string, dir: number) {
+    const i = pinned.findIndex((p) => p.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= pinned.length) return;
+    const a = pinned[i]!;
+    const b = pinned[j]!;
+    pinned[i] = b;
+    pinned[j] = a;
+    persistPins();
+    renderNav();
+  }
+
+  function openPinDialog() {
+    if (!sh) return;
+    closePinDialog();
+    const ov = document.createElement('div');
+    ov.className = 'modal-ov';
+    const box = document.createElement('div');
+    box.className = 'modal';
+    box.innerHTML = `<div class="modal-head"><h3>添加频道</h3><button class="modal-x" aria-label="关闭">✕</button></div><div class="modal-body"></div>`;
+    ov.appendChild(box);
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) closePinDialog();
+    });
+    box.querySelector('.modal-x')!.addEventListener('click', closePinDialog);
+    sh.appendChild(ov);
+    dialogEl = ov;
+    refreshPinDialog();
+  }
+
+  function refreshPinDialog() {
+    if (!dialogEl) return;
+    const body = dialogEl.querySelector('.modal-body') as HTMLElement | null;
+    if (!body) return;
+    body.innerHTML = '';
+    const section = (title: string, items: PinnedChannel[]) => {
+      const h = document.createElement('div');
+      h.className = 'modal-sub';
+      h.textContent = title;
+      body.appendChild(h);
+      const list = document.createElement('div');
+      list.className = 'pin-list';
+      for (const it of items) {
+        const on = pinned.some((p) => p.id === it.id);
+        const row = document.createElement('button');
+        row.className = 'pin-choice' + (on ? ' on' : '');
+        row.innerHTML = `<span>${esc(it.name)}</span><span class="mark">${on ? '已添加' : '＋'}</span>`;
+        row.addEventListener('click', () => {
+          if (on) removePin(it.id);
+          else addPin(it);
+        });
+        list.appendChild(row);
+      }
+      body.appendChild(list);
+    };
+    section(
+      '专题频道',
+      Object.entries(PGC_PRESETS).map(([slug, v]) => ({
+        id: `pgc:${slug}`,
+        kind: 'pgc' as const,
+        name: v.name,
+        ref: slug,
+        icon: v.icon,
+      })),
+    );
+    section(
+      '分区',
+      REGION_PRESETS.map((r) => ({
+        id: `region:${r.rid}`,
+        kind: 'region' as const,
+        name: r.name,
+        ref: String(r.rid),
+      })),
+    );
+  }
+
+  function closePinDialog() {
+    dialogEl?.remove();
+    dialogEl = null;
   }
 
   /* ---------------- 构建 ---------------- */
@@ -1277,22 +1595,7 @@ export function createHome(): HomeController {
         </main>
       </div>`;
 
-    const nav = sh!.querySelector('.nav') as HTMLElement;
-    let lastGroup = '';
-    for (const s of SECTIONS) {
-      if (s.group && s.group !== lastGroup) {
-        const g = document.createElement('div');
-        g.className = 'nav-group';
-        g.textContent = s.group;
-        nav.appendChild(g);
-        lastGroup = s.group;
-      }
-      const b = document.createElement('button');
-      b.dataset.sec = s.key;
-      b.innerHTML = `<span class="ico">${iconSvg(s.icon, 20)}</span><span>${s.label}</span><span class="badge" style="display:none"></span>`;
-      b.addEventListener('click', () => selectSec(s.key));
-      nav.appendChild(b);
-    }
+    renderNav();
     titleEl = sh!.querySelector('.sec-title') as HTMLElement;
     countEl = sh!.querySelector('.count') as HTMLElement;
     contentEl = sh!.querySelector('.content') as HTMLElement;
@@ -1335,7 +1638,8 @@ export function createHome(): HomeController {
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     window.addEventListener('scroll', onScroll, { passive: true });
 
-    states = new Map(SECTIONS.map((s) => [s.key, newState()]));
+    states = new Map<SecKey, SecState>(SECTIONS.map((s) => [s.key, newState()] as [SecKey, SecState]));
+    for (const p of pinned) states.set(`pin:${p.id}` as SecKey, newState());
     if (IS_RELOAD) {
       // 刷新：清空数据缓存，重新拉取
       for (const { key } of SECTIONS) {
@@ -1350,7 +1654,7 @@ export function createHome(): HomeController {
       restoreCache();
     }
     const savedSec = ssGet(K_SECTION) as SecKey | null;
-    selectSec(savedSec && SECTIONS.some((s) => s.key === savedSec) ? savedSec : 'follow');
+    selectSec(savedSec && navKeys().includes(savedSec) ? savedSec : 'follow');
   }
 
   function deactivate() {
@@ -1358,6 +1662,7 @@ export function createHome(): HomeController {
     console.log(TAG, 'deactivate');
     active = false;
     closeMenu();
+    closePinDialog();
     moreObserver?.disconnect();
     window.removeEventListener('scroll', onScroll);
     view?.remove();
@@ -1386,5 +1691,5 @@ export function createHome(): HomeController {
     }
   })();
 
-  return { activate, deactivate, isActive: () => active };
+  return { activate, deactivate, isActive: () => active, setPinned };
 }

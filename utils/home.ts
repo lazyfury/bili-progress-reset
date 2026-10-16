@@ -323,12 +323,19 @@ export async function getBangumiIndex(seasonType: number, page = 1): Promise<Pag
   return { items, hasMore: !!d.has_next, total: d.total ?? 0 };
 }
 
-/* ============================ 游戏区（排行榜，rid=4；该接口不可翻页） ============================ */
-export async function getGameFeed(): Promise<Page<Card>> {
-  const j = await getJson('https://api.bilibili.com/x/web-interface/ranking/v2?rid=4&type=all');
-  assertOk(j, '游戏区读取失败');
+/* ============================ 游戏区/分区排行（rid；需 WBI，不可翻页） ============================ */
+export async function getRegionRank(rid: number): Promise<Card[]> {
+  const fetchRank = async (force: boolean) => {
+    const mixinKey = await getMixinKey(force);
+    const params = wbiSign({ rid, type: 'all' }, mixinKey);
+    return getJson(`https://api.bilibili.com/x/web-interface/ranking/v2?${toQuery(params)}`);
+  };
+  let j = await fetchRank(false);
+  // 该接口已要求 WBI 签名，失效（-352/-403）时强制重取一次
+  if (j?.code === -352 || j?.code === -403) j = await fetchRank(true);
+  assertOk(j, '分区读取失败');
   const list = ((j.data?.list ?? []) as any[]).slice(0, 30);
-  const items: Card[] = list.map((v) => ({
+  return list.map((v) => ({
     id: v.bvid,
     url: `https://www.bilibili.com/video/${v.bvid}`,
     cover: https(v.pic),
@@ -341,7 +348,10 @@ export async function getGameFeed(): Promise<Page<Card>> {
     right: v.stat?.view != null ? `${fmtCount(v.stat.view)}播放` : '',
     duration: v.duration ?? 0,
   }));
-  return { items, hasMore: false };
+}
+
+export async function getGameFeed(): Promise<Page<Card>> {
+  return { items: await getRegionRank(4), hasMore: false };
 }
 
 /* ==================== 专题页模块（轮播/热播榜/专题/推荐；整页一次返回） ==================== */

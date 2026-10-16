@@ -138,44 +138,33 @@ const VIEW_CSS = `
   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
       -webkit-font-smoothing: antialiased; }
 
-  .app { display: flex; min-height: 72vh; background: #fff; color: #0f1115; }
+  .app { min-height: 72vh; background: #fff; color: #0f1115; }
   :focus-visible { outline: 2px solid #fb7299; outline-offset: 2px; border-radius: 6px; }
 
-  /* 侧栏：细线分区，激活项用粉色竖条，不用圆角药丸 */
-  .sidebar { width: 216px; flex: 0 0 216px; padding: 18px 12px 24px; border-right: 1px solid #eef0f2;
-    position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
-  .brand { display: flex; align-items: center; gap: 9px; padding: 4px 10px 18px; font-size: 15px; font-weight: 700; letter-spacing: .2px; }
-  .brand .mark { width: 22px; height: 22px; border-radius: 7px; background: #fb7299; color: #fff;
+  /* 顶部工具栏 + YouTube 风格 tag 栏 */
+  .hdr { display: flex; align-items: center; gap: 14px; padding: 14px 0 10px; }
+  .hdr .brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
+  .hdr .brand .mark { width: 22px; height: 22px; border-radius: 7px; background: #fb7299; color: #fff;
     display: flex; align-items: center; justify-content: center; }
-  .nav { display: flex; flex-direction: column; gap: 1px; }
-  .nav-group { margin: 16px 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: .4px; color: #9aa0a8; }
-  .nav button { position: relative; display: flex; align-items: center; gap: 13px; width: 100%;
-    border: none; background: transparent; color: #3d4148; font-size: 13.5px; line-height: 1;
-    padding: 0 12px; height: 40px; border-radius: 8px; cursor: pointer; text-align: left; }
-  .nav button:hover { background: #f5f6f8; }
-  .nav button.active { color: #0f1115; font-weight: 600; background: #f5f6f8; }
-  .nav button.active::before { content: ''; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: #fb7299; }
-  .nav .ico { flex: 0 0 20px; display: flex; color: #6b7178; }
-  .nav button.active .ico { color: #fb7299; }
-  .nav .badge { margin-left: auto; background: #fb7299; color: #fff; font-size: 11px; font-weight: 600;
-    border-radius: 9px; padding: 1px 7px; line-height: 15px; }
-  .side-foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid #eef0f2; display: flex; flex-direction: column; gap: 1px; }
-  .side-foot button { display: flex; align-items: center; gap: 13px; border: none; background: transparent;
-    color: #6b7178; font-size: 13px; padding: 0 12px; height: 38px; border-radius: 8px; cursor: pointer; text-align: left; }
-  .side-foot button:hover { background: #f5f6f8; color: #0f1115; }
+  .hdr .sp { flex: 1; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; position: sticky; top: 0; background: #fff;
+    z-index: 3; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; border: none; background: #f2f3f5;
+    color: #0f1115; font-size: 13px; line-height: 1; padding: 8px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+  .chip:hover { background: #e9ebee; }
+  .chip.active { background: #0f1115; color: #fff; }
+  .chip.pin::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fb7299; }
+  .chip.pin.active::before { background: #ffb3cd; }
+  .chip.add { background: #fff; border: 1px dashed #d6d9dd; color: #6b7178; }
+  .chip.add:hover { border-color: #fb7299; color: #fb7299; }
+  .chip .badge { background: #fb7299; color: #fff; font-size: 11px; font-weight: 600; border-radius: 9px;
+    padding: 1px 7px; line-height: 15px; }
+  .chip.active .badge { background: #fff; color: #0f1115; }
 
-  /* 自定义固定频道 */
-  .nav-row { position: relative; }
-  .nav-row > button { width: 100%; padding-right: 68px; }
-  .pin-ops { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; gap: 2px; }
-  .nav-row:hover .pin-ops { display: flex; }
-  .pin-ops button { width: 22px; height: 22px; border: none; border-radius: 6px; background: #eceef1; color: #3d4148;
-    font-size: 12px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
-  .pin-ops button:hover { background: #fb7299; color: #fff; }
-  .nav .ico .ini { width: 20px; height: 20px; border-radius: 6px; background: #fb7299; color: #fff; font-size: 11px;
-    font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .nav button.nav-add { margin-top: 6px; color: #9aa0a8; }
-  .nav button.nav-add:hover { color: #0f1115; }
+  .sec-line { display: flex; align-items: baseline; gap: 10px; padding: 4px 0 16px; }
+  .sec-line h2 { font-size: 18px; font-weight: 650; margin: 0; letter-spacing: -.2px; }
+  .sec-line .count { font-size: 12.5px; color: #7c828c; }
 
   /* 添加频道弹窗 */
   .modal-ov { position: fixed; inset: 0; z-index: 2147483600; background: rgba(15,17,21,.42);
@@ -194,18 +183,17 @@ const VIEW_CSS = `
   .pin-choice.on { border-color: #fb7299; background: #fff5f8; }
   .pin-choice .mark { font-size: 11px; color: #7c828c; }
   .pin-choice.on .mark { color: #fb7299; font-weight: 600; }
+  .pin-choice.manage { cursor: default; }
+  .pin-ops2 { display: inline-flex; gap: 4px; }
+  .pin-ops2 button { width: 24px; height: 24px; border: none; border-radius: 6px; background: #f2f3f5; color: #3d4148;
+    font-size: 12px; line-height: 1; cursor: pointer; }
+  .pin-ops2 button:hover { background: #fb7299; color: #fff; }
 
   /* 主区 */
-  .main { flex: 1; min-width: 0; padding: 16px 32px 80px; }
+  .main { width: 100%; max-width: 1680px; margin: 0 auto; padding: 0 32px 80px; }
 
-  .top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; position: sticky; top: 0;
-    background: #fff; padding: 10px 0 12px; z-index: 2; border-bottom: 1px solid transparent; }
-  .top.stuck { border-bottom-color: #eef0f2; }
-  .top h2 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -.2px; }
-  .top .count { font-size: 12.5px; color: #7c828c; }
-  .top .sp { flex: 1; }
-  .search-input { width: 220px; border: 1px solid #eef0f2; background: #f7f8f9; border-radius: 8px;
-    padding: 8px 12px; font-size: 13px; color: #0f1115; outline: none; }
+  .search-input { width: 240px; max-width: 40vw; border: 1px solid #eef0f2; background: #f7f8f9; border-radius: 999px;
+    padding: 9px 16px; font-size: 13px; color: #0f1115; outline: none; }
   .search-input:focus { border-color: #fb7299; background: #fff; }
   .tbtn { border: none; background: transparent; color: #6b7178; font-size: 12.5px; cursor: pointer;
     display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 8px; }
@@ -487,7 +475,6 @@ export function createHome(): HomeController {
   let contentEl: HTMLElement | null = null;
   let titleEl: HTMLElement | null = null;
   let countEl: HTMLElement | null = null;
-  let topEl: HTMLElement | null = null;
   let moreObserver: IntersectionObserver | null = null;
   let lastAutoLoad = 0;
   /** 时间表当前选中天（仅动画频道用） */
@@ -1406,84 +1393,36 @@ export function createHome(): HomeController {
     return p?.name ?? '频道';
   }
 
-  function renderNav() {
-    const nav = sh?.querySelector('.nav') as HTMLElement | null;
-    if (!nav) return;
-    nav.innerHTML = '';
-    let lastGroup = '';
-    let pinnedDone = false;
-    const insertPinned = () => {
-      if (pinnedDone) return;
-      pinnedDone = true;
-      if (pinned.length) {
-        const g = document.createElement('div');
-        g.className = 'nav-group';
-        g.textContent = '已固定';
-        nav.appendChild(g);
-        pinned.forEach((p) => nav.appendChild(pinItem(p)));
+  function renderChips() {
+    const bar = sh?.querySelector('.chips') as HTMLElement | null;
+    if (!bar) return;
+    bar.innerHTML = '';
+    const chip = (key: SecKey, label: string, cls = '') => {
+      const b = document.createElement('button');
+      b.className = 'chip' + cls + (key === sec ? ' active' : '');
+      b.dataset.sec = key;
+      b.textContent = label;
+      if (key === 'message') {
+        const bdg = document.createElement('span');
+        bdg.className = 'badge';
+        bdg.style.display = 'none';
+        b.appendChild(bdg);
       }
-      const add = document.createElement('button');
-      add.className = 'nav-add';
-      add.innerHTML = `<span class="ico">${iconSvg('open-in-new', 18)}</span><span>添加频道</span>`;
-      add.addEventListener('click', openPinDialog);
-      nav.appendChild(add);
+      b.addEventListener('click', () => selectSec(key));
+      bar.appendChild(b);
     };
+    // 固定频道在最前
+    for (const p of pinned) chip(`pin:${p.id}` as SecKey, p.name, ' pin');
     for (const s of SECTIONS) {
       if (s.hidden) continue;
-      if (s.group && s.group !== lastGroup) {
-        insertPinned(); // 已固定 + 添加频道，插在第一个分组（频道页）之前
-        const g = document.createElement('div');
-        g.className = 'nav-group';
-        g.textContent = s.group;
-        nav.appendChild(g);
-        lastGroup = s.group;
-      }
-      nav.appendChild(navItem(s.key, s.label, s.icon));
+      chip(s.key, s.label);
     }
-    insertPinned(); // 无分组时兜底
+    const add = document.createElement('button');
+    add.className = 'chip add';
+    add.textContent = '＋ 添加频道';
+    add.addEventListener('click', openPinDialog);
+    bar.appendChild(add);
     updateBadge();
-  }
-
-  function navItem(key: SecKey, label: string, icon: string): HTMLElement {
-    const b = document.createElement('button');
-    b.dataset.sec = key;
-    if (key === sec) b.classList.add('active');
-    b.innerHTML = `<span class="ico">${iconSvg(icon, 20)}</span><span>${esc(label)}</span><span class="badge" style="display:none"></span>`;
-    b.addEventListener('click', () => selectSec(key));
-    return b;
-  }
-
-  function pinItem(p: PinnedChannel): HTMLElement {
-    const key: SecKey = `pin:${p.id}`;
-    const row = document.createElement('div');
-    row.className = 'nav-row';
-    const b = document.createElement('button');
-    b.dataset.sec = key;
-    if (key === sec) b.classList.add('active');
-    const svg = p.icon ? iconSvg(p.icon, 20) : '';
-    const ico = svg || `<span class="ini">${esc((p.name || '?').slice(0, 1))}</span>`;
-    b.innerHTML = `<span class="ico">${ico}</span><span>${esc(p.name)}</span>`;
-    b.addEventListener('click', () => selectSec(key));
-    row.appendChild(b);
-
-    const ops = document.createElement('span');
-    ops.className = 'pin-ops';
-    const mk = (txt: string, title: string, fn: () => void) => {
-      const o = document.createElement('button');
-      o.textContent = txt;
-      o.title = title;
-      o.addEventListener('click', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        fn();
-      });
-      ops.appendChild(o);
-    };
-    mk('↑', '上移', () => movePin(p.id, -1));
-    mk('↓', '下移', () => movePin(p.id, 1));
-    mk('×', '移除', () => removePin(p.id));
-    row.appendChild(ops);
-    return row;
   }
 
   function persistPins() {
@@ -1494,7 +1433,7 @@ export function createHome(): HomeController {
     pinned = sanitizePins(list);
     for (const p of pinned) ensureState(`pin:${p.id}` as SecKey);
     if (active) {
-      renderNav();
+      renderChips();
       if (!navKeys().includes(sec)) selectSec('follow');
     }
   }
@@ -1504,7 +1443,7 @@ export function createHome(): HomeController {
     pinned = [...pinned, p];
     persistPins();
     ensureState(`pin:${p.id}` as SecKey);
-    renderNav();
+    renderChips();
     refreshPinDialog();
   }
 
@@ -1513,7 +1452,7 @@ export function createHome(): HomeController {
     pinned = pinned.filter((p) => p.id !== id);
     states.delete(key);
     persistPins();
-    renderNav();
+    renderChips();
     if (sec === key) selectSec('follow');
     refreshPinDialog();
   }
@@ -1527,7 +1466,8 @@ export function createHome(): HomeController {
     pinned[i] = b;
     pinned[j] = a;
     persistPins();
-    renderNav();
+    renderChips();
+    refreshPinDialog();
   }
 
   function openPinDialog() {
@@ -1553,6 +1493,35 @@ export function createHome(): HomeController {
     const body = dialogEl.querySelector('.modal-body') as HTMLElement | null;
     if (!body) return;
     body.innerHTML = '';
+    if (pinned.length) {
+      const h = document.createElement('div');
+      h.className = 'modal-sub';
+      h.textContent = '已固定（可排序）';
+      body.appendChild(h);
+      const list = document.createElement('div');
+      list.className = 'pin-list';
+      pinned.forEach((p) => {
+        const row = document.createElement('div');
+        row.className = 'pin-choice on manage';
+        const nm = document.createElement('span');
+        nm.textContent = p.name;
+        const ops = document.createElement('span');
+        ops.className = 'pin-ops2';
+        const mk = (txt: string, title: string, fn: () => void) => {
+          const o = document.createElement('button');
+          o.textContent = txt;
+          o.title = title;
+          o.addEventListener('click', fn);
+          ops.appendChild(o);
+        };
+        mk('↑', '上移', () => movePin(p.id, -1));
+        mk('↓', '下移', () => movePin(p.id, 1));
+        mk('×', '移除', () => removePin(p.id));
+        row.append(nm, ops);
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+    }
     const section = (title: string, items: PinnedChannel[]) => {
       const h = document.createElement('div');
       h.className = 'modal-sub';
@@ -1603,31 +1572,28 @@ export function createHome(): HomeController {
   function build() {
     sh!.innerHTML = `<style>${VIEW_CSS}</style>
       <div class="app">
-        <aside class="sidebar">
-          <div class="brand"><span class="mark">${iconSvg('play-arrow', 15)}</span> 我的首页</div>
-          <nav class="nav"></nav>
-          <div class="side-foot">
-            <button data-act="refresh">${iconSvg('refresh', 19)} 刷新</button>
-            <button data-act="close">${iconSvg('arrow-back', 19)} 还原首页</button>
-          </div>
-        </aside>
         <main class="main">
-          <div class="top">
+          <header class="hdr">
+            <div class="brand"><span class="mark">${iconSvg('play-arrow', 15)}</span> 我的首页</div>
+            <input class="search-input" type="search" placeholder="搜索视频…" aria-label="搜索视频" />
+            <span class="sp"></span>
+            <button class="tbtn" data-act="refresh">${iconSvg('refresh', 16)} 刷新</button>
+            <button class="tbtn" data-act="close">${iconSvg('arrow-back', 16)} 还原首页</button>
+            <button class="tbtn" data-act="bili">${iconSvg('open-in-new', 15)} 打开 B 站</button>
+          </header>
+          <div class="chips"></div>
+          <div class="sec-line">
             <h2 class="sec-title">关注</h2>
             <span class="count"></span>
-            <span class="sp"></span>
-            <input class="search-input" type="search" placeholder="搜索视频…" aria-label="搜索视频" />
-            <button class="tbtn" data-act="bili">${iconSvg('open-in-new', 15)} 打开 B 站</button>
           </div>
           <div class="content"></div>
         </main>
       </div>`;
 
-    renderNav();
+    renderChips();
     titleEl = sh!.querySelector('.sec-title') as HTMLElement;
     countEl = sh!.querySelector('.count') as HTMLElement;
     contentEl = sh!.querySelector('.content') as HTMLElement;
-    topEl = sh!.querySelector('.top') as HTMLElement;
 
     sh!.querySelector('[data-act="refresh"]')!.addEventListener('click', () => void loadSec(sec, true));
     sh!.querySelector('[data-act="close"]')!.addEventListener('click', () => {
@@ -1653,10 +1619,6 @@ export function createHome(): HomeController {
     b.style.display = n > 0 ? '' : 'none';
   }
 
-  function onScroll() {
-    if (topEl) topEl.classList.toggle('stuck', window.scrollY > 4);
-  }
-
   async function activate() {
     if (active) return;
     active = true;
@@ -1671,7 +1633,6 @@ export function createHome(): HomeController {
     removeBootOverlay();
 
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-    window.addEventListener('scroll', onScroll, { passive: true });
 
     states = new Map<SecKey, SecState>(SECTIONS.map((s) => [s.key, newState()] as [SecKey, SecState]));
     for (const p of pinned) states.set(`pin:${p.id}` as SecKey, newState());
@@ -1699,14 +1660,12 @@ export function createHome(): HomeController {
     closeMenu();
     closePinDialog();
     moreObserver?.disconnect();
-    window.removeEventListener('scroll', onScroll);
     view?.remove();
     view = null;
     sh = null;
     contentEl = null;
     titleEl = null;
     countEl = null;
-    topEl = null;
     states = new Map();
     restoreOld();
     removeBootAll();

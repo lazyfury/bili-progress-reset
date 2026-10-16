@@ -1,4 +1,4 @@
-import { iconSvg } from './icons';
+import { biliTvSvg, iconSvg } from './icons';
 import { readMirroredSettings, removeBootAll, removeBootOverlay } from './boot';
 import type { PinnedChannel } from './types';
 import {
@@ -503,7 +503,7 @@ export function createHome(): HomeController {
     pill = document.createElement('div');
     pill.id = 'bpr-home-pill';
     const ps = pill.attachShadow({ mode: 'open' });
-    ps.innerHTML = `<style>${PILL_CSS}</style><button>${iconSvg('favorite', 15)} 我的首页</button>`;
+    ps.innerHTML = `<style>${PILL_CSS}</style><button>${biliTvSvg(16)} 我的首页</button>`;
     ps.querySelector('button')!.addEventListener('click', () => (active ? deactivate() : void activate()));
     document.body.appendChild(pill);
     console.log(TAG, 'pill 已注入');
@@ -1608,7 +1608,7 @@ export function createHome(): HomeController {
     sh!.innerHTML = `<style>${VIEW_CSS}</style>
       <div class="app">
         <aside class="sidebar">
-          <div class="brand"><span class="mark">${iconSvg('play-arrow', 15)}</span> 我的首页</div>
+          <div class="brand"><span class="mark">${biliTvSvg(14)}</span> 我的首页</div>
           <nav class="nav"></nav>
           <div class="side-foot">
             <button data-act="refresh">${iconSvg('refresh', 19)} 刷新</button>

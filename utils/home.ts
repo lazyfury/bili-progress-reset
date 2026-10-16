@@ -313,6 +313,49 @@ export async function getGameFeed(): Promise<Page<Card>> {
   return { items, hasMore: false };
 }
 
+/* ==================== 专题页模块（轮播/热播榜/专题/推荐；整页一次返回） ==================== */
+export interface ChannelModules {
+  rankTitle: string;
+  rank: Card[];
+  columnTitle: string;
+  column: Card[];
+}
+
+/** 专题页卡片映射：rank 带名次，column/hot 带运营角标 */
+function moduleCard(it: any, i: number, kind: 'rank' | 'column' | 'hot'): Card {
+  return {
+    id: String(it?.season_id ?? it?.episode_id ?? it?.item_id ?? it?.link ?? `${kind}-${i}`),
+    url: normalizeUrl(it?.link),
+    cover: https(it?.cover),
+    title: it?.title ?? '',
+    up: it?.sub_title ?? '',
+    score: it?.rating || undefined,
+    badge: kind === 'rank' ? it?.rank_tag || `NO.${i + 1}` : it?.img_badge || '',
+    pinned: kind === 'rank' && i === 0,
+  };
+}
+
+/**
+ * 拉取专题页版式模块。动画/国创走 `pgc/page/web/v3`，其余走 `v2`。
+ * 返回「热播榜」+「专题（无专题时回退为新热推荐）」。
+ */
+export async function getChannelModules(name: string, v3 = false): Promise<ChannelModules> {
+  const path = v3 ? 'pgc/page/web/v3' : 'pgc/page/web/v2';
+  const j = await getJson(`https://api.bilibili.com/${path}?name=${encodeURIComponent(name)}`);
+  assertOk(j, '专题页读取失败');
+  const modules = (j.data?.modules ?? []) as any[];
+  const pick = (prefix: string) =>
+    modules.find((m) => String(m?.style ?? '').startsWith(prefix));
+  const rankMod = pick('web_rank');
+  const colMod = pick('web_column') ?? pick('web_hot');
+  return {
+    rankTitle: rankMod?.title || '热播榜',
+    rank: ((rankMod?.items ?? []) as any[]).map((it, i) => moduleCard(it, i, 'rank')),
+    columnTitle: colMod?.title || '专题',
+    column: ((colMod?.items ?? []) as any[]).map((it, i) => moduleCard(it, i, 'column')),
+  };
+}
+
 /* ============================ 历史记录（游标翻页） ============================ */
 export interface HistoryCursor {
   max: number;

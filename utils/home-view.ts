@@ -6,6 +6,7 @@ import {
   fmtDuration,
   getBangumiFollow,
   getBangumiIndex,
+  getChannelModules,
   getFollowFeed,
   getGameFeed,
   getHistory,
@@ -55,11 +56,16 @@ const SECTIONS: { key: SecKey; label: string; icon: string }[] = [
  * seasonType 见 `pgc/season/index/result`；followType 见 `x/space/bangumi/follow/list`
  * （该接口只接受 1=番剧 / 2=电视剧，故纪录片/电影不做“追”列表）。
  */
-const PGC: Partial<Record<SecKey, { seasonType: number; followType?: 1 | 2; followTitle?: string }>> = {
-  anime: { seasonType: 1, followType: 1, followTitle: '我的追番' },
-  tv: { seasonType: 5, followType: 2, followTitle: '我的追剧' },
-  doc: { seasonType: 3 },
-  movie: { seasonType: 2 },
+const PGC: Partial<
+  Record<
+    SecKey,
+    { seasonType: number; followType?: 1 | 2; followTitle?: string; page: string; v3?: boolean }
+  >
+> = {
+  anime: { seasonType: 1, followType: 1, followTitle: '我的追番', page: 'anime', v3: true },
+  tv: { seasonType: 5, followType: 2, followTitle: '我的追剧', page: 'tv' },
+  doc: { seasonType: 3, page: 'documentary' },
+  movie: { seasonType: 2, page: 'movie' },
 };
 
 /* ------------------------- 设计令牌 -------------------------
@@ -197,6 +203,8 @@ const VIEW_CSS = `
   .mini .mt { font-size: 12px; line-height: 1.35; margin-top: 6px; height: 2.7em; overflow: hidden; color: #0f1115;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .mini:hover .mt { color: #e14a78; }
+  .mini .msub { font-size: 11px; line-height: 1.3; margin-top: 2px; color: #7c828c;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* 卡片「⋯」菜单：关注 / 取关 / 拉黑 */
   .cmore { position: absolute; right: 5px; top: 5px; width: 26px; height: 26px; border: none; border-radius: 50%;
@@ -252,6 +260,12 @@ interface SecState {
   items: Card[];
   /** 追番/追剧（单独一排展示） */
   follow: Card[];
+  /** 专题页热播榜 */
+  rank: Card[];
+  /** 专题页专题/推荐位 */
+  column: Card[];
+  rankTitle: string;
+  columnTitle: string;
   loading: boolean;
   loaded: boolean;
   error: string;
@@ -261,7 +275,19 @@ interface SecState {
   total?: number;
 }
 
-const newState = (): SecState => ({ items: [], follow: [], loading: false, loaded: false, error: '', hasMore: true, page: 1 });
+const newState = (): SecState => ({
+  items: [],
+  follow: [],
+  rank: [],
+  column: [],
+  rankTitle: '',
+  columnTitle: '',
+  loading: false,
+  loaded: false,
+  error: '',
+  hasMore: true,
+  page: 1,
+});
 
 /* ------------------------- 会话持久化（同一个 tab 内跨导航） ------------------------- */
 const K_SECTION = 'bpr:home:section';
@@ -325,7 +351,7 @@ export function createHome(): HomeController {
   let states = new Map<SecKey, SecState>();
   let msgCounts: MsgCounts | null = null;
   let msgItems: MsgItem[] = [];
-  const expanded = new Set<SecKey>();
+  const expanded = new Set<string>();
   /** mid -> relation.attribute（0 未关注 / 1 悄悄 / 2 单向 / 6 互关 / 128 拉黑） */
   const relations = new Map<number, number>();
   let menuEl: HTMLElement | null = null;
@@ -527,45 +553,68 @@ export function createHome(): HomeController {
     }
     const mb = moreButton(c);
     if (mb) thumb.appendChild(mb);
+    if (c.score) {
+      const sc = document.createElement('div');
+      sc.className = 'score';
+      sc.textContent = c.score;
+      thumb.appendChild(sc);
+    }
     const t = document.createElement('div');
     t.className = 'mt';
     t.textContent = c.title;
     el.append(thumb, t);
+    if (c.up) {
+      const sub = document.createElement('div');
+      sub.className = 'msub';
+      sub.textContent = c.up;
+      el.appendChild(sub);
+    }
     return el;
   }
 
-  function followBlock(st: SecState): HTMLElement {
+  /** 通用横排：标题 + 可选角标 + 展开/收起，卡片复用 miniCardEl */
+  function rowBlock(title: string, items: Card[], rowKey: string, badgeText?: string): HTMLElement {
+    const key = `${sec}:${rowKey}`;
     const wrap = document.createElement('div');
     wrap.className = 'follow';
     const head = document.createElement('div');
     head.className = 'follow-head';
     const h = document.createElement('h3');
-    h.textContent = PGC[sec]?.followTitle ?? '我的追番';
+    h.textContent = title;
     head.appendChild(h);
-    const upd = st.follow.filter((c) => c.pinned).length;
-    if (upd) {
+    if (badgeText) {
       const badge = document.createElement('span');
       badge.className = 'pin-badge';
-      badge.textContent = `${upd} 部有更新`;
+      badge.textContent = badgeText;
       head.appendChild(badge);
     }
-    const isExp = expanded.has(sec);
+    const isExp = expanded.has(key);
     const btn = document.createElement('button');
     btn.className = 'more-btn';
     btn.textContent = isExp ? '收起' : '展开全部';
     btn.addEventListener('click', () => {
-      if (isExp) expanded.delete(sec);
-      else expanded.add(sec);
+      if (isExp) expanded.delete(key);
+      else expanded.add(key);
       renderGrid(states.get(sec)!);
     });
     head.appendChild(btn);
 
     const row = document.createElement('div');
     row.className = 'follow-row' + (isExp ? ' expanded' : '');
-    for (const c of st.follow) row.appendChild(miniCardEl(c));
+    for (const c of items) row.appendChild(miniCardEl(c));
 
     wrap.append(head, row);
     return wrap;
+  }
+
+  function followBlock(st: SecState): HTMLElement {
+    const upd = st.follow.filter((c) => c.pinned).length;
+    return rowBlock(
+      PGC[sec]?.followTitle ?? '我的追番',
+      st.follow,
+      'follow',
+      upd ? `${upd} 部有更新` : undefined,
+    );
   }
 
   function renderGrid(st: SecState) {
@@ -574,7 +623,7 @@ export function createHome(): HomeController {
     if (countEl) countEl.textContent = st.items.length ? `${st.items.length} 个视频` : '';
     contentEl.innerHTML = '';
 
-    const hasAny = st.items.length || st.follow.length;
+    const hasAny = st.items.length || st.follow.length || st.rank.length || st.column.length;
     if (st.loading && !hasAny) {
       contentEl.appendChild(skeletonGrid());
       return;
@@ -600,6 +649,8 @@ export function createHome(): HomeController {
     if (PGC[sec]?.followType && st.follow.length) {
       contentEl.appendChild(followBlock(st));
     }
+    if (st.rank.length) contentEl.appendChild(rowBlock(st.rankTitle || '热播榜', st.rank, 'rank'));
+    if (st.column.length) contentEl.appendChild(rowBlock(st.columnTitle || '专题', st.column, 'column'));
 
     if (st.items.length) {
       const grid = document.createElement('div');
@@ -903,7 +954,7 @@ export function createHome(): HomeController {
     if (!st || (!st.items.length && !st.follow.length)) return;
     ssSet(
       kCache(key),
-      JSON.stringify({ items: st.items, follow: st.follow, cursor: st.cursor ?? null, hasMore: st.hasMore, page: st.page, total: st.total ?? 0, ts: Date.now() }),
+      JSON.stringify({ items: st.items, follow: st.follow, rank: st.rank, column: st.column, rankTitle: st.rankTitle, columnTitle: st.columnTitle, cursor: st.cursor ?? null, hasMore: st.hasMore, page: st.page, total: st.total ?? 0, ts: Date.now() }),
     );
   }
   function restoreCache(): void {
@@ -912,8 +963,8 @@ export function createHome(): HomeController {
       if (!raw) continue;
       try {
         const c = JSON.parse(raw);
-        if (!c || Date.now() - (c.ts ?? 0) > CACHE_TTL || !c.items?.length) continue;
-        states.set(key, { items: c.items, follow: c.follow ?? [], cursor: c.cursor ?? undefined, hasMore: !!c.hasMore, page: c.page ?? 1, total: c.total ?? 0, loading: false, loaded: true, error: '' });
+        if (!c || Date.now() - (c.ts ?? 0) > CACHE_TTL || (!c.items?.length && !c.rank?.length && !c.column?.length)) continue;
+        states.set(key, { items: c.items, follow: c.follow ?? [], rank: c.rank ?? [], column: c.column ?? [], rankTitle: c.rankTitle ?? '', columnTitle: c.columnTitle ?? '', cursor: c.cursor ?? undefined, hasMore: !!c.hasMore, page: c.page ?? 1, total: c.total ?? 0, loading: false, loaded: true, error: '' });
       } catch {
         /* ignore */
       }
@@ -953,22 +1004,26 @@ export function createHome(): HomeController {
       } else if (PGC[key]) {
         const cfg = PGC[key]!;
         if (reset) {
-          const idxP = getBangumiIndex(cfg.seasonType, 1);
-          if (cfg.followType) {
-            // 我的追番/追剧单独一排置顶；items 只放频道内容
-            const [follow, idx] = await Promise.all([
-              getBangumiFollow(cfg.followType, 1).catch(() => ({ items: [] as Card[], hasMore: false })),
-              idxP,
-            ]);
-            st.follow = follow.items;
-            st.items = idx.items;
-            st.hasMore = idx.hasMore;
-          } else {
-            const idx = await idxP;
-            st.follow = [];
-            st.items = idx.items;
-            st.hasMore = idx.hasMore;
-          }
+          const followP: Promise<{ items: Card[] }> = cfg.followType
+            ? getBangumiFollow(cfg.followType, 1).catch(() => ({ items: [] as Card[] }))
+            : Promise.resolve({ items: [] as Card[] });
+          const [follow, idx, mods] = await Promise.all([
+            followP,
+            getBangumiIndex(cfg.seasonType, 1),
+            getChannelModules(cfg.page, cfg.v3).catch(() => ({
+              rankTitle: '',
+              rank: [] as Card[],
+              columnTitle: '',
+              column: [] as Card[],
+            })),
+          ]);
+          st.follow = follow.items;
+          st.items = idx.items;
+          st.hasMore = idx.hasMore;
+          st.rank = mods.rank;
+          st.rankTitle = mods.rankTitle;
+          st.column = mods.column;
+          st.columnTitle = mods.columnTitle;
           st.page = 2;
         } else {
           const idx = await getBangumiIndex(cfg.seasonType, st.page);

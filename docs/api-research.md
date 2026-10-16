@@ -165,6 +165,9 @@ UGC 进度上报用 `heartbeat` 的 `type=3`（与 PGC 的 `type=4` 不同），
 | 追番 / 追剧 | `x/space/bangumi/follow/list?type=1|2&follow_type=1&vmid=<mid>` | `pn` 翻页（仅 `type=1/2`） |
 | 动画 / 电视剧 / 纪录片 / 电影频道 | `pgc/season/index/result?season_type=1|5|3|2` | `page` 翻页（同 `/anime/`、`/tv/` 等） |
 | 游戏区排行 | `x/web-interface/ranking/v2?rid=4&type=all` | 无（不可翻页） |
+| 专题页版式 | `pgc/page/web/v2?name=tv|movie|documentary|variety`、`v3?name=anime|guochuang` | 整页 `modules[]`（banner/index/hot/rank/column/operation/feed） |
+| 专题页 feed | `pgc/page/web/feed`、`pgc/page/web/v3/feed` | `coursor` 翻页 |
+| 新番时间表 | `pgc/web/timeline?types=1,2,3,4,5,7` | 按天 |
 | 历史记录 | `x/web-interface/history/cursor` | `max` / `view_at` 游标 |
 | 消息数 | `x/msgfeed/unread` | 无 |
 | 消息列表 | `x/msgfeed/reply`、`x/msgfeed/at`、`x/msgfeed/like` | `pn`/`ps` |

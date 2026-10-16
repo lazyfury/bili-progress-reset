@@ -14,6 +14,7 @@ import {
   getMessages,
   getRecommend,
   getRelationAttrs,
+  getTimeline,
   getWatchLater,
   modifyRelation,
   cancelDislike,
@@ -22,6 +23,7 @@ import {
   type HistoryCursor,
   type MsgCounts,
   type MsgItem,
+  type TimelineDay,
 } from './home';
 
 const TAG = '[bpr-home]';
@@ -59,10 +61,10 @@ const SECTIONS: { key: SecKey; label: string; icon: string; group?: string }[] =
 const PGC: Partial<
   Record<
     SecKey,
-    { seasonType: number; followType?: 1 | 2; followTitle?: string; page: string; v3?: boolean }
+    { seasonType: number; followType?: 1 | 2; followTitle?: string; page: string; v3?: boolean; timeline?: string }
   >
 > = {
-  anime: { seasonType: 1, followType: 1, followTitle: '我的追番', page: 'anime', v3: true },
+  anime: { seasonType: 1, followType: 1, followTitle: '我的追番', page: 'anime', v3: true, timeline: '1' },
   tv: { seasonType: 5, followType: 2, followTitle: '我的追剧', page: 'tv' },
   doc: { seasonType: 3, page: 'documentary' },
   movie: { seasonType: 2, page: 'movie' },
@@ -207,6 +209,13 @@ const VIEW_CSS = `
   .mini .msub { font-size: 11px; line-height: 1.3; margin-top: 2px; color: #7c828c;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* 新番时间表：日期 tab */
+  .tl-tabs { margin-left: auto; display: flex; gap: 4px; overflow-x: auto; }
+  .tl-tabs button { border: none; background: transparent; color: #6b7178; font-size: 12px; line-height: 1;
+    padding: 6px 9px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+  .tl-tabs button:hover { background: #f5f6f8; color: #0f1115; }
+  .tl-tabs button.active { background: #fb7299; color: #fff; font-weight: 600; }
+
   /* 卡片「⋯」菜单：关注 / 取关 / 拉黑 */
   .cmore { position: absolute; right: 5px; top: 5px; width: 26px; height: 26px; border: none; border-radius: 50%;
     background: rgba(15,17,21,.55); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
@@ -265,6 +274,8 @@ interface SecState {
   rank: Card[];
   /** 专题页专题/推荐位 */
   column: Card[];
+  /** 新番时间表（仅部分频道） */
+  timeline: TimelineDay[];
   rankTitle: string;
   columnTitle: string;
   loading: boolean;
@@ -281,6 +292,7 @@ const newState = (): SecState => ({
   follow: [],
   rank: [],
   column: [],
+  timeline: [],
   rankTitle: '',
   columnTitle: '',
   loading: false,
@@ -364,6 +376,8 @@ export function createHome(): HomeController {
   let topEl: HTMLElement | null = null;
   let moreObserver: IntersectionObserver | null = null;
   let lastAutoLoad = 0;
+  /** 时间表当前选中天（仅动画频道用） */
+  let timelineDay = 0;
 
   /* ---------------- pill ---------------- */
   function ensurePill() {
@@ -618,13 +632,45 @@ export function createHome(): HomeController {
     );
   }
 
+  /** 新番时间表：日期 tab + 当日剧集横排 */
+  function timelineBlock(st: SecState): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'follow';
+    const head = document.createElement('div');
+    head.className = 'follow-head';
+    const h = document.createElement('h3');
+    h.textContent = '新番时间表';
+    head.appendChild(h);
+
+    const tabs = document.createElement('div');
+    tabs.className = 'tl-tabs';
+    const body = document.createElement('div');
+    body.className = 'follow-row';
+    const renderDay = (i: number) => {
+      timelineDay = i;
+      tabs.querySelectorAll('button').forEach((b, bi) => b.classList.toggle('active', bi === i));
+      body.innerHTML = '';
+      for (const c of st.timeline[i]?.episodes ?? []) body.appendChild(miniCardEl(c));
+    };
+    st.timeline.forEach((d, i) => {
+      const b = document.createElement('button');
+      b.textContent = d.isToday ? '今天' : d.date;
+      b.addEventListener('click', () => renderDay(i));
+      tabs.appendChild(b);
+    });
+    head.appendChild(tabs);
+    wrap.append(head, body);
+    renderDay(Math.min(Math.max(timelineDay, 0), st.timeline.length - 1));
+    return wrap;
+  }
+
   function renderGrid(st: SecState) {
     if (!contentEl) return;
     if (titleEl) titleEl.textContent = SECTIONS.find((x) => x.key === sec)!.label;
     if (countEl) countEl.textContent = st.items.length ? `${st.items.length} 个视频` : '';
     contentEl.innerHTML = '';
 
-    const hasAny = st.items.length || st.follow.length || st.rank.length || st.column.length;
+    const hasAny = st.items.length || st.follow.length || st.rank.length || st.column.length || st.timeline.length;
     if (st.loading && !hasAny) {
       contentEl.appendChild(skeletonGrid());
       return;
@@ -651,6 +697,7 @@ export function createHome(): HomeController {
       contentEl.appendChild(followBlock(st));
     }
     if (st.rank.length) contentEl.appendChild(rowBlock(st.rankTitle || '热播榜', st.rank, 'rank'));
+    if (st.timeline.length) contentEl.appendChild(timelineBlock(st));
     if (st.column.length) contentEl.appendChild(rowBlock(st.columnTitle || '专题', st.column, 'column'));
 
     if (st.items.length) {
@@ -955,7 +1002,7 @@ export function createHome(): HomeController {
     if (!st || (!st.items.length && !st.follow.length)) return;
     ssSet(
       kCache(key),
-      JSON.stringify({ items: st.items, follow: st.follow, rank: st.rank, column: st.column, rankTitle: st.rankTitle, columnTitle: st.columnTitle, cursor: st.cursor ?? null, hasMore: st.hasMore, page: st.page, total: st.total ?? 0, ts: Date.now() }),
+      JSON.stringify({ items: st.items, follow: st.follow, rank: st.rank, column: st.column, timeline: st.timeline, rankTitle: st.rankTitle, columnTitle: st.columnTitle, cursor: st.cursor ?? null, hasMore: st.hasMore, page: st.page, total: st.total ?? 0, ts: Date.now() }),
     );
   }
   function restoreCache(): void {
@@ -964,8 +1011,8 @@ export function createHome(): HomeController {
       if (!raw) continue;
       try {
         const c = JSON.parse(raw);
-        if (!c || Date.now() - (c.ts ?? 0) > CACHE_TTL || (!c.items?.length && !c.rank?.length && !c.column?.length)) continue;
-        states.set(key, { items: c.items, follow: c.follow ?? [], rank: c.rank ?? [], column: c.column ?? [], rankTitle: c.rankTitle ?? '', columnTitle: c.columnTitle ?? '', cursor: c.cursor ?? undefined, hasMore: !!c.hasMore, page: c.page ?? 1, total: c.total ?? 0, loading: false, loaded: true, error: '' });
+        if (!c || Date.now() - (c.ts ?? 0) > CACHE_TTL || (!c.items?.length && !c.rank?.length && !c.column?.length && !c.timeline?.length)) continue;
+        states.set(key, { items: c.items, follow: c.follow ?? [], rank: c.rank ?? [], column: c.column ?? [], timeline: c.timeline ?? [], rankTitle: c.rankTitle ?? '', columnTitle: c.columnTitle ?? '', cursor: c.cursor ?? undefined, hasMore: !!c.hasMore, page: c.page ?? 1, total: c.total ?? 0, loading: false, loaded: true, error: '' });
       } catch {
         /* ignore */
       }
@@ -1008,7 +1055,10 @@ export function createHome(): HomeController {
           const followP: Promise<{ items: Card[] }> = cfg.followType
             ? getBangumiFollow(cfg.followType, 1).catch(() => ({ items: [] as Card[] }))
             : Promise.resolve({ items: [] as Card[] });
-          const [follow, idx, mods] = await Promise.all([
+          const timelineP: Promise<TimelineDay[]> = cfg.timeline
+            ? getTimeline(cfg.timeline).catch(() => [] as TimelineDay[])
+            : Promise.resolve([] as TimelineDay[]);
+          const [follow, idx, mods, timeline] = await Promise.all([
             followP,
             getBangumiIndex(cfg.seasonType, 1),
             getChannelModules(cfg.page, cfg.v3).catch(() => ({
@@ -1017,6 +1067,7 @@ export function createHome(): HomeController {
               columnTitle: '',
               column: [] as Card[],
             })),
+            timelineP,
           ]);
           st.follow = follow.items;
           st.items = idx.items;
@@ -1025,6 +1076,7 @@ export function createHome(): HomeController {
           st.rankTitle = mods.rankTitle;
           st.column = mods.column;
           st.columnTitle = mods.columnTitle;
+          st.timeline = timeline;
           st.page = 2;
         } else {
           const idx = await getBangumiIndex(cfg.seasonType, st.page);

@@ -356,6 +356,36 @@ export async function getChannelModules(name: string, v3 = false): Promise<Chann
   };
 }
 
+/* ============================ 新番时间表 ============================ */
+export interface TimelineDay {
+  date: string;
+  dateTs: number;
+  isToday: boolean;
+  episodes: Card[];
+}
+
+/** types: 1=番剧 4=国创 5=电视剧…（逗号可合并）；before/after 控制前后天数 */
+export async function getTimeline(types: string, before = 0, after = 6): Promise<TimelineDay[]> {
+  const j = await getJson(
+    `https://api.bilibili.com/pgc/web/timeline?types=${encodeURIComponent(types)}&before=${before}&after=${after}`,
+  );
+  assertOk(j, '新番时间表读取失败');
+  return ((j.result ?? []) as any[]).map((d) => ({
+    date: d?.date ?? '',
+    dateTs: d?.date_ts ?? 0,
+    isToday: !!d?.is_today,
+    episodes: ((d?.episodes ?? []) as any[]).map((e) => ({
+      id: String(e?.season_id ?? e?.episode_id ?? ''),
+      url: `https://www.bilibili.com/bangumi/play/ep${e?.episode_id}`,
+      cover: https(e?.cover),
+      title: e?.title ?? '',
+      badge: e?.pub_index ?? '',
+      up: e?.delay ? '延迟更新' : '',
+      pinned: !!d?.is_today,
+    })),
+  }));
+}
+
 /* ============================ 历史记录（游标翻页） ============================ */
 export interface HistoryCursor {
   max: number;

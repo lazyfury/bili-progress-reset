@@ -7,10 +7,13 @@ export const FLOATING_KEY = 'floatingEnabled';
 export const HOMEPAGE_KEY = 'homepageEnabled';
 export const PINNED_KEY = 'pinnedChannels';
 
+export const HOME_PILL_KEY = 'homePillEnabled';
+
 /** 所有设置的默认值 */
 export const DEFAULT_SETTINGS: Record<string, unknown> = {
   [FLOATING_KEY]: false,
   [HOMEPAGE_KEY]: false,
+  [HOME_PILL_KEY]: true,
   [PINNED_KEY]: [] as PinnedChannel[],
 };
 

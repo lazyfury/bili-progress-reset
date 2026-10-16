@@ -25,6 +25,7 @@ export default defineContentScript({
     let app: HomeMount | null = null;
     let pill: HTMLElement | null = null;
     let enabled = false;
+    let pillEnabled = true;
     let pinnedChannels: PinnedChannel[] = [];
 
     const postSetting = (key: string, value: unknown) =>
@@ -53,6 +54,10 @@ export default defineContentScript({
     /* -------- mount / unmount -------- */
     const props = () => ({ pinned: pinnedChannels, onExit });
 
+    const setPillDisplay = () => {
+      if (pill) pill.style.display = pillEnabled && !app ? '' : 'none';
+    };
+
     const mountApp = () => {
       if (app || !isHome()) return;
       if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -61,7 +66,7 @@ export default defineContentScript({
       host.id = 'new-home-app';
       document.body.appendChild(host);
       app = mountHome(host, props());
-      if (pill) pill.style.display = 'none';
+      setPillDisplay();
       removeBootOverlay();
       console.log('[bpr-home] React app mounted');
     };
@@ -71,7 +76,7 @@ export default defineContentScript({
       app = null;
       restoreOld();
       removeBootAll();
-      if (pill) pill.style.display = '';
+      setPillDisplay();
       if ('scrollRestoration' in history) history.scrollRestoration = 'auto';
     };
 
@@ -87,12 +92,15 @@ export default defineContentScript({
     };
 
     const ensurePill = () => {
-      if (pill || !isHome() || !document.body) return;
-      pill = createPill(() => {
-        enabled = true;
-        apply();
-      });
-      console.log('[bpr-home] pill 已注入');
+      if (!isHome() || !document.body) return;
+      if (!pill) {
+        pill = createPill(() => {
+          enabled = true;
+          apply();
+        });
+        console.log('[bpr-home] pill 已注入');
+      }
+      setPillDisplay();
     };
 
     /* -------- 设置同步 -------- */
@@ -103,10 +111,14 @@ export default defineContentScript({
       if (ev.source !== window) return;
       const d = ev.data as RpcRequest | undefined;
       if (!d || d.__bpr !== 'req' || d.cmd !== 'settings') return;
-      const payload = d.payload as { homepageEnabled?: boolean; pinnedChannels?: PinnedChannel[] } | undefined;
+      const payload = d.payload as
+        | { homepageEnabled?: boolean; homePillEnabled?: boolean; pinnedChannels?: PinnedChannel[] }
+        | undefined;
       enabled = !!payload?.homepageEnabled;
+      pillEnabled = payload?.homePillEnabled !== false;
       pinnedChannels = Array.isArray(payload?.pinnedChannels) ? payload.pinnedChannels! : [];
       app?.update(props());
+      ensurePill();
       apply();
     });
 

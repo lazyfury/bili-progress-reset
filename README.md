@@ -166,6 +166,7 @@ npm run zip        # 打包发布 zip
 ### 入口与排障
 
 - 首页右下角常驻小圆钮 **「我的首页」**：**能看到它就说明内容脚本在运行**，点它即可进入（无需设置）。
+  popup 里有「首页右下角『我的首页』小圆钮」开关，可关掉它（默认开）。
 - 页面 Console 会输出 `[bpr-home]` 日志：`injected → settings → activate → loaded`。
 - manifest 用 `https://www.bilibili.com/*` 宽匹配 + 运行时 `pathname` 判断，因为 `https://www.bilibili.com/` 匹配不到带 query 的首页。
 

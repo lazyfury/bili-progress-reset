@@ -87,6 +87,7 @@ export default function App() {
 
   const [floating, setFloating] = useState(false);
   const [homepage, setHomepage] = useState(false);
+  const [homePill, setHomePill] = useState(true);
 
   const rpcRef = useRef<RpcClient | null>(null);
   const tabIdRef = useRef<number | null>(null);
@@ -105,10 +106,11 @@ export default function App() {
       if (disposed) return;
       setKind(k);
 
-      const s = await browser.storage.local.get({ floatingEnabled: false, homepageEnabled: false });
+      const s = await browser.storage.local.get({ floatingEnabled: false, homepageEnabled: false, homePillEnabled: true });
       if (disposed) return;
       setFloating(!!s.floatingEnabled);
       setHomepage(!!s.homepageEnabled);
+      setHomePill(!!s.homePillEnabled);
 
       if (k !== 'bangumi' || tab?.id == null) {
         setPhase('ready');
@@ -196,6 +198,11 @@ export default function App() {
     await browser.storage.local.set({ homepageEnabled: v });
     if (kind === 'home') reloadTab();
   };
+  const toggleHomePill = async () => {
+    const v = !homePill;
+    setHomePill(v);
+    await browser.storage.local.set({ homePillEnabled: v });
+  };
   const toggleSeason = (id: number) => {
     setChecked((prev) => {
       const next = new Set(prev);
@@ -226,6 +233,10 @@ export default function App() {
         <div className="dim" style={{ margin: '2px 0 8px 24px' }}>
           开关会自动刷新首页；若仍没变化，到 chrome://extensions 点一下本扩展的刷新按钮。
         </div>
+        <label className="row" style={{ marginTop: 8 }}>
+          <input type="checkbox" checked={homePill} onChange={toggleHomePill} />
+          <span>首页右下角「我的首页」小圆钮</span>
+        </label>
         <label className="row" style={{ marginTop: 8 }}>
           <input type="checkbox" checked={floating} onChange={toggleFloating} />
           <span>播放页右下角悬浮窗</span>

@@ -167,6 +167,7 @@ UGC 进度上报用 `heartbeat` 的 `type=3`（与 PGC 的 `type=4` 不同），
 | 游戏区排行 / 分区排行 | `x/web-interface/ranking/v2?rid=4&type=all` | 无（不可翻页；**已需 WBI 签名**） |
 | 专题页版式 | `pgc/page/web/v2?name=tv|movie|documentary|variety`、`v3?name=anime|guochuang` | 整页 `modules[]`（banner/index/hot/rank/column/operation/feed） |
 | 专题页 feed | `pgc/page/web/feed`、`pgc/page/web/v3/feed` | `coursor` 翻页 |
+| 搜索（视频） | `x/web-interface/wbi/search/type?search_type=video&keyword=&page=` | `page` 翻页（`numPages`；需 WBI） |
 | 新番时间表 | `pgc/web/timeline?types=1,2,3,4,5,7` | 按天 |
 | 历史记录 | `x/web-interface/history/cursor` | `max` / `view_at` 游标 |
 | 消息数 | `x/msgfeed/unread` | 无 |

@@ -22,6 +22,7 @@ import {
   modifyRelation,
   cancelDislike,
   dislikeVideo,
+  searchVideos,
   type Card,
   type HistoryCursor,
   type MsgCounts,
@@ -44,22 +45,22 @@ type StaticKey =
   | 'game'
   | 'history'
   | 'message'
-  | 'profile';
+  | 'profile'
+  | 'search';
 type PinKey = `pin:${string}`;
 type SecKey = StaticKey | PinKey;
 
-const SECTIONS: { key: StaticKey; label: string; icon: string; group?: string }[] = [
+const SECTIONS: { key: StaticKey; label: string; icon: string; group?: string; hidden?: boolean }[] = [
   { key: 'recommend', label: '推荐', icon: 'recommend' },
   { key: 'follow', label: '关注', icon: 'subscriptions' },
   { key: 'toview', label: '稍后再看', icon: 'schedule' },
-  { key: 'anime', label: '动画', icon: 'movie', group: '频道页' },
-  { key: 'tv', label: '电视剧', icon: 'live-tv', group: '频道页' },
-  { key: 'doc', label: '纪录片', icon: 'videocam', group: '频道页' },
+  { key: 'anime', label: '番剧', icon: 'movie', group: '频道页' },
   { key: 'movie', label: '电影', icon: 'theaters', group: '频道页' },
-  { key: 'game', label: '游戏', icon: 'sports-esports', group: '频道页' },
+  { key: 'tv', label: '电视剧', icon: 'live-tv', group: '频道页' },
   { key: 'profile', label: '个人中心', icon: 'account-circle', group: '我的' },
   { key: 'history', label: '历史记录', icon: 'history', group: '我的' },
   { key: 'message', label: '消息', icon: 'notifications', group: '我的' },
+  { key: 'search', label: '搜索', icon: 'search', hidden: true },
 ];
 
 /**
@@ -88,7 +89,7 @@ const PGC_PRESETS: Record<
   string,
   { name: string; seasonType: number; v3?: boolean; timeline?: string; followType?: 1 | 2; icon: string }
 > = {
-  anime: { name: '动画', seasonType: 1, v3: true, timeline: '1', icon: 'movie' },
+  anime: { name: '番剧', seasonType: 1, v3: true, timeline: '1', icon: 'movie' },
   guochuang: { name: '国创', seasonType: 4, v3: true, icon: 'movie' },
   tv: { name: '电视剧', seasonType: 5, icon: 'live-tv' },
   movie: { name: '电影', seasonType: 2, icon: 'theaters' },
@@ -203,6 +204,9 @@ const VIEW_CSS = `
   .top h2 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -.2px; }
   .top .count { font-size: 12.5px; color: #7c828c; }
   .top .sp { flex: 1; }
+  .search-input { width: 220px; border: 1px solid #eef0f2; background: #f7f8f9; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; color: #0f1115; outline: none; }
+  .search-input:focus { border-color: #fb7299; background: #fff; }
   .tbtn { border: none; background: transparent; color: #6b7178; font-size: 12.5px; cursor: pointer;
     display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 8px; }
   .tbtn:hover { background: #f5f6f8; color: #0f1115; }
@@ -473,6 +477,7 @@ export function createHome(): HomeController {
   let profile: ProfileData | null = null;
   let pinned: PinnedChannel[] = sanitizePins(readMirroredSettings().pinnedChannels);
   let dialogEl: HTMLElement | null = null;
+  let searchKeyword = '';
   const expanded = new Set<string>();
   /** mid -> relation.attribute（0 未关注 / 1 悄悄 / 2 单向 / 6 互关 / 128 拉黑） */
   const relations = new Map<number, number>();
@@ -775,7 +780,7 @@ export function createHome(): HomeController {
 
   function renderGrid(st: SecState) {
     if (!contentEl) return;
-    if (titleEl) titleEl.textContent = labelOf(sec);
+    if (titleEl) titleEl.textContent = sec === 'search' ? `搜索：${searchKeyword}` : labelOf(sec);
     if (countEl) countEl.textContent = st.items.length ? `${st.items.length} 个视频` : '';
     contentEl.innerHTML = '';
 
@@ -1324,6 +1329,12 @@ export function createHome(): HomeController {
         }
       } else if (key === 'profile') {
         if (reset) profile = await getSelfProfile();
+      } else if (key === 'search') {
+        const p = await searchVideos(searchKeyword, st.page);
+        if (reset) st.items = [];
+        st.items.push(...p.items);
+        st.hasMore = p.hasMore;
+        st.page += 1;
       }
       st.loaded = true;
       saveCache(key);
@@ -1345,9 +1356,17 @@ export function createHome(): HomeController {
     }
   }
 
+  function doSearch(raw: string) {
+    const kw = raw.trim();
+    if (!kw) return;
+    searchKeyword = kw;
+    states.set('search', newState());
+    selectSec('search');
+  }
+
   function selectSec(key: SecKey) {
     sec = key;
-    ssSet(K_SECTION, key);
+    if (key !== 'search') ssSet(K_SECTION, key);
     if (!sh) return;
     sh.querySelectorAll('[data-sec]').forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.sec === key));
     if (titleEl) titleEl.textContent = labelOf(key);
@@ -1396,16 +1415,23 @@ export function createHome(): HomeController {
     const insertPinned = () => {
       if (pinnedDone) return;
       pinnedDone = true;
-      if (!pinned.length) return;
-      const g = document.createElement('div');
-      g.className = 'nav-group';
-      g.textContent = '已固定';
-      nav.appendChild(g);
-      pinned.forEach((p) => nav.appendChild(pinItem(p)));
+      if (pinned.length) {
+        const g = document.createElement('div');
+        g.className = 'nav-group';
+        g.textContent = '已固定';
+        nav.appendChild(g);
+        pinned.forEach((p) => nav.appendChild(pinItem(p)));
+      }
+      const add = document.createElement('button');
+      add.className = 'nav-add';
+      add.innerHTML = `<span class="ico">${iconSvg('open-in-new', 18)}</span><span>添加频道</span>`;
+      add.addEventListener('click', openPinDialog);
+      nav.appendChild(add);
     };
     for (const s of SECTIONS) {
+      if (s.hidden) continue;
       if (s.group && s.group !== lastGroup) {
-        insertPinned(); // 已固定插在第一个分组（频道页）之前
+        insertPinned(); // 已固定 + 添加频道，插在第一个分组（频道页）之前
         const g = document.createElement('div');
         g.className = 'nav-group';
         g.textContent = s.group;
@@ -1415,11 +1441,6 @@ export function createHome(): HomeController {
       nav.appendChild(navItem(s.key, s.label, s.icon));
     }
     insertPinned(); // 无分组时兜底
-    const add = document.createElement('button');
-    add.className = 'nav-add';
-    add.innerHTML = `<span class="ico">${iconSvg('open-in-new', 18)}</span><span>添加频道</span>`;
-    add.addEventListener('click', openPinDialog);
-    nav.appendChild(add);
     updateBadge();
   }
 
@@ -1595,6 +1616,7 @@ export function createHome(): HomeController {
             <h2 class="sec-title">关注</h2>
             <span class="count"></span>
             <span class="sp"></span>
+            <input class="search-input" type="search" placeholder="搜索视频…" aria-label="搜索视频" />
             <button class="tbtn" data-act="bili">${iconSvg('open-in-new', 15)} 打开 B 站</button>
           </div>
           <div class="content"></div>
@@ -1613,6 +1635,13 @@ export function createHome(): HomeController {
       deactivate();
     });
     sh!.querySelector('[data-act="bili"]')!.addEventListener('click', () => deactivate());
+    const searchInput = sh!.querySelector('.search-input') as HTMLInputElement;
+    searchInput.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') {
+        e.preventDefault();
+        doSearch(searchInput.value);
+      }
+    });
     updateBadge();
   }
 
@@ -1660,7 +1689,7 @@ export function createHome(): HomeController {
       restoreCache();
     }
     const savedSec = ssGet(K_SECTION) as SecKey | null;
-    selectSec(savedSec && navKeys().includes(savedSec) ? savedSec : 'follow');
+    selectSec(savedSec && savedSec !== 'search' && navKeys().includes(savedSec) ? savedSec : 'follow');
   }
 
   function deactivate() {

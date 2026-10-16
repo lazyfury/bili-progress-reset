@@ -77,7 +77,7 @@ npm run zip        # 打包发布 zip
 
 把 B 站首页信息流替换成一个 **YouTube 风格的自定义首页**：左侧栏 + 视频网格。
 
-侧栏分三组：**推荐 / 关注 / 稍后再看** · **频道页**（动画/电视剧/纪录片/电影/游戏）· **我的**（个人中心/历史记录/消息）。
+侧栏分三组：**推荐 / 关注 / 稍后再看** · **频道页**（番剧/电影/电视剧）· **我的**（个人中心/历史记录/消息）；顶部有搜索框。其余频道（国创/纪录片/综艺、游戏等分区）通过「添加频道」固定。
 
 栏目（全部只读，复用登录 Cookie）：
 
@@ -86,26 +86,27 @@ npm run zip        # 打包发布 zip
 | **推荐** | `x/web-interface/wbi/index/top/feed/rcmd`（需 WBI） | `fresh_idx` 翻页 |
 | **关注** | `x/polymer/web-dynamic/v1/feed/all?type=video` | offset 翻页 |
 | 稍后再看 | `x/v2/history/toview` | 无 |
-| 动画 | `pgc/season/index/result?season_type=1`（同 `/anime/`） | page 翻页 |
+| 番剧 | `pgc/season/index/result?season_type=1`（同 `/anime/`） | page 翻页 |
 | 电视剧 | `pgc/season/index/result?season_type=5`（同 `/tv/`） | page 翻页 |
-| 纪录片 | `pgc/season/index/result?season_type=3`（同 `/documentary/`） | page 翻页 |
 | 电影 | `pgc/season/index/result?season_type=2`（同 `/movie/`） | page 翻页 |
-| 游戏 | `x/web-interface/ranking/v2?rid=4&type=all`（需 WBI） | 无 |
+| 搜索 | `x/web-interface/wbi/search/type?search_type=video`（需 WBI） | `page` 翻页 |
 | 个人中心 | `x/web-interface/nav` + `x/relation/stat` | 无（账号资料 + 快捷入口） |
 | 历史记录 | `x/web-interface/history/cursor` | `max`/`view_at` 游标 |
 | 消息 | `x/msgfeed/unread` + `reply/at/like` | 未读角标 + 最近消息 |
 
-> 「动画 / 电视剧 / 纪录片 / 电影」展示的是**官方频道内容**（与 `/anime/`、`/tv/` 等落地页同源），
-> 其中「动画 / 电视剧」把你的**追番 / 追剧单独做成一排**放在顶部（`space/bangumi/follow/list` 仅支持 `type=1/2`，
-> 纪录片/电影无此排）：默认一行横向滚动，点「展开全部」换行铺开；
+> 「番剧 / 电视剧 / 电影」展示的是**官方频道内容**（与 `/anime/`、`/tv/` 等落地页同源），
+> 其中「番剧 / 电视剧」把你的**追番 / 追剧单独做成一排**放在顶部（`space/bangumi/follow/list` 仅支持 `type=1/2`，
+> 电影无此排）：默认一行横向滚动，点「展开全部」换行铺开；
 > 标题旁有「N 部有更新」badge（有更新的项用粉色角标）。未登录时追番/追剧拉不到，仅显示频道内容。
 > 封面右上角显示评分（`score`）。
 >
 > 每个频道顶部还叠加了专题页版式（`pgc/page/web/v2|v3`）：**热播榜**（`web_rank_*`，带名次/评分）
 > 与**专题/推荐**（`web_column`，无专题时回退 `web_hot`），同样是横向可展开的一排。
-> 「动画」额外有 **新番时间表**（`pgc/web/timeline?types=1`）：7 天日期 tab + 当日剧集横排。
+> 「番剧」额外有 **新番时间表**（`pgc/web/timeline?types=1`）：7 天日期 tab + 当日剧集横排。
 >
-> **已固定频道**：侧栏「添加频道」可把任意专题频道（`pgc/page/web/v2|v3`）
+> **搜索**：顶部搜索框回车即拉 `x/web-interface/wbi/search/type`（视频，30/页，可翻页）。
+>
+> **已固定频道**：侧栏「添加频道」可把任意专题频道（`pgc/page/web/v2|v3`，含国创/纪录片/综艺）
 > 或 UGC 分区（`ranking/v2?rid=`，需 WBI）固定成独立频道，支持上移/下移/移除；
 > 列表存 `storage.local`，随设置同步。
 

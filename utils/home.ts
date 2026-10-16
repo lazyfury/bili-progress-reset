@@ -354,6 +354,37 @@ export async function getGameFeed(): Promise<Page<Card>> {
   return { items: await getRegionRank(4), hasMore: false };
 }
 
+/* ============================ 搜索（视频） ============================ */
+const stripEm = (s: string): string => s.replace(/<[^>]+>/g, '');
+
+export async function searchVideos(keyword: string, page = 1): Promise<Page<Card>> {
+  const fetchPage = async (force: boolean) => {
+    const mixinKey = await getMixinKey(force);
+    const params = wbiSign({ search_type: 'video', keyword, page, page_size: 30 }, mixinKey);
+    return getJson(`https://api.bilibili.com/x/web-interface/wbi/search/type?${toQuery(params)}`);
+  };
+  let j = await fetchPage(false);
+  if (j?.code === -352 || j?.code === -403) j = await fetchPage(true);
+  assertOk(j, '搜索失败');
+  const d = j.data ?? {};
+  const items: Card[] = ((d.result ?? []) as any[])
+    .filter((v) => v?.bvid)
+    .map((v) => ({
+      id: v.bvid,
+      url: `https://www.bilibili.com/video/${v.bvid}`,
+      cover: https(v.pic),
+      title: stripEm(v.title ?? ''),
+      up: v.author ?? '',
+      upFace: https(v.upic),
+      mid: v.mid ? Number(v.mid) : undefined,
+      aid: v.aid ? Number(v.aid) : undefined,
+      right: v.play != null ? `${fmtCount(v.play)}播放` : '',
+      duration: parseDur(v.duration),
+    }));
+  const numPages = Number(d.numPages ?? 0);
+  return { items, hasMore: items.length > 0 && (numPages ? page < numPages : items.length >= 30) };
+}
+
 /* ==================== 专题页模块（轮播/热播榜/专题/推荐；整页一次返回） ==================== */
 export interface ChannelModules {
   rankTitle: string;

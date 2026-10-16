@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "B站剧集进度重置 (00:00)",
+  "version": "1.0.0",
+  "description": "把番剧/剧集的所有集播放进度一键重置为 00:00，解决二刷时每集都显示“播放中”的问题。",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.bilibili.com/bangumi/play/*",
+        "https://www.bilibili.com/bangumi/media/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}

@@ -29,13 +29,17 @@ POST https://api.bilibili.com/x/click-interface/web/heartbeat
 ```
 entrypoints/
   bilibili-main.content.ts   world:MAIN —— 播放页引擎 + 可选悬浮窗 + RPC
-  home.content.ts            world:MAIN —— 首页重构（稍后再看 + 关注新视频）
+  home.content.ts            world:MAIN —— 首页重构（挂载 React 应用到 #new-home-app）
   bridge.content.ts          ISOLATED —— popup ↔ 主世界 转发，同步设置
   popup/                     React 主界面（index.html / main.tsx / App.tsx / style.css）
 utils/
   engine.ts                  业务引擎：取季、收集剧集、心跳归零、进度回调
-  home.ts                    首页数据源（稍后再看 / 关注动态，只读）
-  home-view.ts               首页自定义 UI
+  home.ts                    首页数据源（推荐 / 关注 / 追番 / 历史 / 消息 / 搜索…，只读）
+  home-app/                  首页 React 应用（全部状态在 React）
+    index.tsx                mountHome(#new-home-app, shadow DOM) / 常驻小圆钮
+    store.tsx                状态容器（sections 缓存、pinned、消息、个人中心、toast…）
+    HomeApp.tsx              UI 组件（侧栏 / tag 栏 / 网格 / 排行榜 / 时间表 / 弹窗…）
+    css.ts                   样式（由旧 home-view.ts 迁移）
   wbi.ts                     WBI 签名（w_rid / wts）
   md5.ts                     纯 JS MD5（crypto.subtle 无 MD5）
   floating.ts                播放页悬浮窗（可选）
@@ -76,6 +80,9 @@ npm run zip        # 打包发布 zip
 ## 首页重构（可选）
 
 把 B 站首页信息流替换成一个 **YouTube 风格的自定义首页**：左侧栏（基础功能）+ 内容区顶部 tag 栏（固定频道）+ 视频网格。
+
+> 实现：React 应用挂载到 `#new-home-app`（内部 Shadow DOM 隔离样式），**全部状态由 React 管理**（`utils/home-app/`）；
+> 数据层仍是 `utils/home.ts` 的只读接口。
 
 **左侧栏**是基础功能（推荐/关注/稍后再看 · 番剧/电影/电视剧 · 个人中心/历史记录/消息）；**内容区顶部是一条 tag（chip）栏，只放「已固定频道」**，末尾是「＋ 添加频道」。点 tag 就在下方渲染对应频道内容（复用同一套卡片与 SWR）。
 

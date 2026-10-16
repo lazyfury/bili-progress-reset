@@ -67,7 +67,12 @@ function normalizeUrl(u?: string): string {
 async function getJson(url: string): Promise<any> {
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('返回内容不是 JSON（可能被风控拦截）');
+  }
 }
 
 function assertOk(j: any, what: string): void {
@@ -157,24 +162,29 @@ function parseDur(t?: string): number {
 
 /* ============================ 首页推荐（WBI 签名，可翻页） ============================ */
 export async function getRecommend(freshIdx = 1): Promise<Page<Card>> {
-  const mixinKey = await getMixinKey();
-  const params = wbiSign(
-    {
-      web_location: 1430650,
-      y_num: 5,
-      fresh_type: 4,
-      feed_version: 'V8',
-      fresh_idx: freshIdx,
-      fresh_idx_1h: 1,
-      fetch_row: 1,
-      brush: 0,
-      homepage_ver: 1,
-      ps: 12,
-      last_showlist: '',
-    },
-    mixinKey,
-  );
-  const j = await getJson(`https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd?${toQuery(params)}`);
+  const fetchPage = async (forceKey: boolean) => {
+    const mixinKey = await getMixinKey(forceKey);
+    const params = wbiSign(
+      {
+        web_location: 1430650,
+        y_num: 5,
+        fresh_type: 4,
+        feed_version: 'V8',
+        fresh_idx: freshIdx,
+        fresh_idx_1h: 1,
+        fetch_row: 1,
+        brush: 0,
+        homepage_ver: 1,
+        ps: 12,
+        last_showlist: '',
+      },
+      mixinKey,
+    );
+    return getJson(`https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd?${toQuery(params)}`);
+  };
+  let j = await fetchPage(false);
+  // WBI 签名失效（跨天/公钥轮换）：强制重取一次
+  if (j?.code === -352 || j?.code === -403) j = await fetchPage(true);
   assertOk(j, '推荐读取失败');
   const items: Card[] = [];
   for (const it of (j.data?.item ?? []) as any[]) {
@@ -232,7 +242,7 @@ export async function getBangumiFollow(type: 1 | 2, pn = 1): Promise<Page<Card>>
     const newEp: string = b.new_ep?.index_show || '';
     return {
       id: String(b.season_id),
-      url: b.url || `https://www.bilibili.com/bangumi/play/ss${b.season_id}`,
+      url: normalizeUrl(b.url || `https://www.bilibili.com/bangumi/play/ss${b.season_id}`),
       cover: https(b.cover),
       title: b.title ?? '',
       up: (b.areas ?? []).map((a: any) => a.name).join(' / '),
@@ -318,7 +328,8 @@ export async function getHistory(cursor?: HistoryCursor): Promise<Page<Card> & {
   });
   const c = j.data?.cursor;
   const next: HistoryCursor | undefined = c ? { max: c.max, viewAt: c.view_at } : undefined;
-  return { items, hasMore: !!c, next };
+  // 最后一页列表为空，但 cursor 仍会返回：必须靠 items 判空，否则会无限“加载更多”
+  return { items, hasMore: items.length > 0 && !!c, next };
 }
 
 /* ============================ 关注关系（关注/取关/拉黑） ============================ */
@@ -390,15 +401,20 @@ export async function getRelationAttrs(mids: number[]): Promise<Record<number, n
   const out: Record<number, number> = {};
   const uniq = [...new Set(mids.filter(Boolean))];
   if (!uniq.length) return out;
-  const j = await getJson(`https://api.bilibili.com/x/relation/relations?fids=${uniq.join(',')}`);
-  if (j.code !== 0) throw new Error(`关系读取失败：${j.code}`);
-  const d = j.data;
-  const arr: any[] = Array.isArray(d) ? d : Array.isArray(d?.list) ? d.list : Object.values(d ?? {});
-  for (const it of arr) {
-    const mid = Number(it?.mid ?? it?.fid);
-    if (!mid) continue;
-    const attr = it?.attribute ?? it?.relation?.attribute ?? 0;
-    out[mid] = Number(attr);
+  // 分块查询：fids 过多时 URL 会超长导致失败
+  const CHUNK = 50;
+  for (let i = 0; i < uniq.length; i += CHUNK) {
+    const chunk = uniq.slice(i, i + CHUNK);
+    const j = await getJson(`https://api.bilibili.com/x/relation/relations?fids=${chunk.join(',')}`);
+    if (j.code !== 0) throw new Error(`关系读取失败：${j.code}`);
+    const d = j.data;
+    const arr: any[] = Array.isArray(d) ? d : Array.isArray(d?.list) ? d.list : Object.values(d ?? {});
+    for (const it of arr) {
+      const mid = Number(it?.mid ?? it?.fid);
+      if (!mid) continue;
+      const attr = it?.attribute ?? it?.relation?.attribute ?? 0;
+      out[mid] = Number(attr);
+    }
   }
   return out;
 }

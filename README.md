@@ -86,6 +86,8 @@ npm run zip        # 打包发布 zip
 | 稍后再看 | `x/v2/history/toview` | 无 |
 | 动画 | `pgc/season/index/result?season_type=1`（同 `/anime/`） | page 翻页 |
 | 电视剧 | `pgc/season/index/result?season_type=5`（同 `/tv/`） | page 翻页 |
+| 历史记录 | `x/web-interface/history/cursor` | `max`/`view_at` 游标 |
+| 消息 | `x/msgfeed/unread` + `reply/at/like` | 未读角标 + 最近消息 |
 
 > 「动画 / 电视剧」展示的是**官方频道内容**（与 `/anime/`、`/tv/` 落地页同源），
 > 并把你的**追番 / 追剧单独做成一排**放在顶部：默认一行横向滚动，点「展开全部」换行铺开；
@@ -112,7 +114,9 @@ npm run zip        # 打包发布 zip
 - 接近底部自动加载（`IntersectionObserver`，`rootMargin: 600px` 提前触发）；
 - **节流**：最快 700ms 一次；且「加载中 / 无更多 / 出错」时不触发；只对当前栏目生效；
 - 切栏或离开会断开 observer，不会误触；
-- 保留「加载更多」按钮作为手动兜底。
+- 保留「加载更多」按钮作为手动兜底；
+- **切换栏目会强制刷新**：先用现有内容即时渲染，再后台重新拉取（SWR），不闪骨架屏；
+- **消息栏**进入时会重新拉取列表与未读角标；角标请求失败时保留上一次的值（不清零）。
 
 ### 返回行为（已删除滚动恢复）
 
@@ -122,13 +126,12 @@ npm run zip        # 打包发布 zip
 |---|---|
 | 切换 tab | 滚动条回到顶部 |
 | **刷新**（`reload`） | **清空数据缓存**，重新拉取 |
-| **后退**（`back_forward`）/ 直接进入（`navigate`） | 用缓存**秒开**，回到同一栏目、顶部 |
+| **后退**（`back_forward`）/ 直接进入（`navigate`） | 先用缓存**秒开**，再后台刷新当前栏目；回到同一栏目、顶部 |
 
-- 数据缓存 TTL = **5 分钟**（`CACHE_TTL`）；
+- 数据缓存 TTL = **5 分钟**（`CACHE_TTL`），仅用于「后退秒开」，随后仍会后台刷新；
+- 切换栏目与后退都是**后台刷新**（SWR），不清空已有内容，也不恢复滚动位置；
 - 已删除滚动位置保存/恢复（`saveScroll`/`restoreScroll`/`kScroll`），代码更干净；
 - 注：若上一页是重定向页（如 `/video/...` 跳 `/bangumi/...`），`back_forward` 可能降级为 `navigate`，行为等效（同样用缓存），不影响。
-| 历史记录 | `x/web-interface/history/cursor` | 游标翻页 |
-| 消息 | `x/msgfeed/unread` + `reply/at/like` | 未读角标 + 最近消息 |
 
 - 图标来自 **Iconify（material-symbols）**，在构建期拉取并内联到 `utils/icons.ts`，运行时不请求 `api.iconify.dom`（避免 CSP/离线问题）。
 - 在 popup 打开「重构首页」开关后自动进入；页面右下角常驻「我的首页」小圆钮可手动进入。
@@ -153,14 +156,13 @@ npm run zip        # 打包发布 zip
 
 遮罩带 8 秒兜底，避免意外卡死。
 
-### 返回时保留栏目与滚动位置
+### 返回时保留栏目
 
-点开视频再返回，原先会回到默认栏目和顶部。现在用 `sessionStorage`（同 tab 内跨导航）：
+点开视频再返回时，用 `sessionStorage`（同 tab 内跨导航）记住当前栏目：
 
-- `bpr:home:section` 记住当前栏目；
-- `bpr:home:scroll:<栏目>` 记住每栏滚动位置（节流保存，点卡片/切栏前再存一次）；
-- `bpr:home:cache:<栏目>` 缓存首屏数据（30 分钟 TTL），返回时**立即渲染**不白屏，再自己决定是否刷新；
-- 激活时设 `history.scrollRestoration = 'manual'`，由我们自己恢复滚动。
+- `bpr:home:section` 记住当前栏目，返回时自动回到该栏目；
+- `bpr:home:cache:<栏目>` 缓存首屏数据（TTL 5 分钟），返回时**立即渲染**不白屏，随后在后台刷新；
+- 激活时设 `history.scrollRestoration = 'manual'`；滚动位置**不恢复**（切栏/返回都回到顶部）。
 
 ### 设计说明（依据 frontend-design skill）
 

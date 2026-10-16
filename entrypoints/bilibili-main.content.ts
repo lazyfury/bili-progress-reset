@@ -16,7 +16,7 @@ export default defineContentScript({
   runAt: 'document_idle',
   main() {
     const floating = createFloating();
-    const post = (msg: unknown) => window.postMessage(msg, '*');
+    const post = (msg: unknown) => window.postMessage(msg, location.origin);
 
     window.addEventListener('message', async (ev: MessageEvent) => {
       if (ev.source !== window) return;
@@ -54,7 +54,7 @@ export default defineContentScript({
 
     // 主动拉取设置（桥接脚本可能晚于本脚本挂载）
     [0, 300, 1200].forEach((ms) =>
-      setTimeout(() => window.postMessage({ __bpr: 'req', id: -2, cmd: 'getSettings' }, '*'), ms),
+      setTimeout(() => window.postMessage({ __bpr: 'req', id: -2, cmd: 'getSettings' }, location.origin), ms),
     );
   },
 });

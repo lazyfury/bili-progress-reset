@@ -8,24 +8,30 @@ const MIXIN_TAB = [
   36, 20, 34, 44, 52,
 ];
 
-let cachedMixinKey: string | null = null;
+let cached: { key: string; day: string } | null = null;
 
 /** 从 nav 接口取 wbi 公钥并生成 mixinKey（按天变化，进程内缓存） */
-export async function getMixinKey(): Promise<string> {
-  if (cachedMixinKey) return cachedMixinKey;
+export async function getMixinKey(force = false): Promise<string> {
+  const day = new Date().toISOString().slice(0, 10);
+  if (!force && cached && cached.day === day) return cached.key;
+
   const res = await fetch('https://api.bilibili.com/x/web-interface/nav', {
     credentials: 'include',
   });
-  const j = (await res.json()) as {
-    data: { wbi_img: { img_url: string; sub_url: string } };
-  };
-  const img = j.data.wbi_img.img_url;
-  const sub = j.data.wbi_img.sub_url;
-  const imgKey = img.slice(img.lastIndexOf('/') + 1).split('.')[0];
-  const subKey = sub.slice(sub.lastIndexOf('/') + 1).split('.')[0];
-  const orig = (imgKey ?? '') + (subKey ?? '');
-  cachedMixinKey = MIXIN_TAB.map((i) => orig[i]!).join('').slice(0, 32);
-  return cachedMixinKey;
+  if (!res.ok) throw new Error(`获取 WBI 公钥失败：HTTP ${res.status}`);
+  const j = (await res.json().catch(() => null)) as {
+    data?: { wbi_img?: { img_url?: string; sub_url?: string } };
+  } | null;
+  const imgUrl = j?.data?.wbi_img?.img_url;
+  const subUrl = j?.data?.wbi_img?.sub_url;
+  if (!imgUrl || !subUrl) throw new Error('获取 WBI 公钥失败：返回结构异常');
+
+  const imgKey = imgUrl.slice(imgUrl.lastIndexOf('/') + 1).split('.')[0] ?? '';
+  const subKey = subUrl.slice(subUrl.lastIndexOf('/') + 1).split('.')[0] ?? '';
+  const orig = imgKey + subKey;
+  const key = MIXIN_TAB.map((i) => orig[i] ?? '').join('').slice(0, 32);
+  cached = { key, day };
+  return key;
 }
 
 export type WbiParams = Record<string, string | number | boolean>;

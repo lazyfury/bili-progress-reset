@@ -50,10 +50,11 @@ export function createFloating(): FloatingController {
   let info: SeasonInfo | null = null;
   let running = false;
   let checks: { seasonId: number; input: HTMLInputElement }[] = [];
+  let ref = parseVideoRef(location.href);
 
   async function mount() {
     if (host) return;
-    const ref = parseVideoRef(location.href);
+    ref = parseVideoRef(location.href);
     if (!ref) return;
 
     host = document.createElement('div');
@@ -120,7 +121,13 @@ export function createFloating(): FloatingController {
         ` 每集归零，每季“上次播放”重置到第 1 集。`;
     };
 
-    fab.addEventListener('click', () => panel.classList.toggle('open'));
+    fab.addEventListener('click', () => {
+      panel.classList.toggle('open');
+      if (!panel.classList.contains('open')) return;
+      // SPA 换集/换季后重新读取当前 URL 对应的剧集
+      const cur = parseVideoRef(location.href);
+      if (cur && (!ref || cur.kind !== ref.kind || cur.id !== ref.id)) void loadInfo();
+    });
     $('x').addEventListener('click', () => panel.classList.remove('open'));
     allCb.addEventListener('change', () => {
       checks.forEach((c) => (c.input.disabled = !allCb.checked));
@@ -138,14 +145,17 @@ export function createFloating(): FloatingController {
     reloadBtn.addEventListener('click', () => location.reload());
 
     runBtn.addEventListener('click', async () => {
-      if (running || !info || !ref) return;
+      const curRef = ref;
+      if (running || !info || !curRef) return;
+      const picks = selected();
+      if (picks.length > 1 && !confirm(`将重置 ${picks.length} 季的全部剧集进度，确认继续？`)) return;
       running = true;
       runBtn.disabled = true;
       reloadBtn.disabled = true;
       logEl.innerHTML = '';
       setBar(0, 1);
       try {
-        await runReset(ref, selected(), (p: ResetProgress) => {
+        await runReset(curRef, picks, (p: ResetProgress) => {
           if (p.type === 'meta') {
             setBar(0, p.total);
             log(`共 ${p.seasons} 季 / ${p.total} 集（每季倒序，末次落到第 1 集）。`, 'info');
@@ -172,29 +182,45 @@ export function createFloating(): FloatingController {
 
     (document.body || document.documentElement).appendChild(host);
     seasonsBox.style.opacity = '.45';
+    await loadInfo();
 
-    try {
-      info = await getSeasonInfo(ref);
-      checks = info.seasons.map((s) => {
-        const lab = document.createElement('label');
-        lab.title = s.title;
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = s.seasonId === info!.seasonId;
-        input.disabled = !allCb.checked;
-        input.addEventListener('change', updateDesc);
-        const span = document.createElement('span');
-        span.textContent = s.title;
-        lab.appendChild(input);
-        lab.appendChild(span);
-        list.appendChild(lab);
-        return { seasonId: s.seasonId, input };
-      });
-      if (info.seasons.length > 1) seasonsBox.classList.add('show');
-      updateDesc();
-      runBtn.disabled = false;
-    } catch (e) {
-      desc.textContent = '读取剧集失败：' + (e instanceof Error ? e.message : String(e));
+    async function loadInfo() {
+      list.innerHTML = '';
+      checks = [];
+      info = null;
+      seasonsBox.classList.remove('show');
+      runBtn.disabled = true;
+      desc.textContent = '正在读取剧集信息…';
+      const cur = parseVideoRef(location.href);
+      if (!cur) {
+        desc.textContent = '当前页面不是番剧/电视剧播放页';
+        return;
+      }
+      ref = cur;
+      try {
+        const data = await getSeasonInfo(cur);
+        info = data;
+        checks = data.seasons.map((s) => {
+          const lab = document.createElement('label');
+          lab.title = s.title;
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.checked = s.seasonId === data.seasonId;
+          input.disabled = !allCb.checked;
+          input.addEventListener('change', updateDesc);
+          const span = document.createElement('span');
+          span.textContent = s.title;
+          lab.appendChild(input);
+          lab.appendChild(span);
+          list.appendChild(lab);
+          return { seasonId: s.seasonId, input };
+        });
+        if (data.seasons.length > 1) seasonsBox.classList.add('show');
+        updateDesc();
+        runBtn.disabled = false;
+      } catch (e) {
+        desc.textContent = '读取剧集失败：' + (e instanceof Error ? e.message : String(e));
+      }
     }
   }
 

@@ -69,7 +69,9 @@ async function fetchSeason(params: Record<string, string | number>): Promise<Raw
   const res = await fetch(`${API}/pgc/view/web/season?${toQuery(params)}`, {
     credentials: 'include',
   });
-  const j = await res.json();
+  if (!res.ok) throw new Error(`获取剧集失败：HTTP ${res.status}`);
+  const j = await res.json().catch(() => null);
+  if (!j) throw new Error('获取剧集失败：返回内容不是 JSON（可能被风控拦截）');
   if (j.code !== 0 || !j.result) throw new Error(`获取剧集失败：code=${j.code} ${j.message ?? ''}`);
   return j.result as RawSeasonResult;
 }
@@ -100,14 +102,27 @@ export async function getSeasonInfo(ref: VideoRef): Promise<SeasonInfo> {
 }
 
 const seasonCache = new Map<number, { type: number; episodes: Episode[] }>();
+const seasonInflight = new Map<number, Promise<{ type: number; episodes: Episode[] }>>();
 
 async function fetchSeasonEpisodes(seasonId: number): Promise<{ type: number; episodes: Episode[] }> {
   const cached = seasonCache.get(seasonId);
   if (cached) return cached;
-  const r = await fetchSeason({ season_id: seasonId });
-  const val = { type: r.type, episodes: normalizeEpisodes(r) };
-  seasonCache.set(seasonId, val);
-  return val;
+  // 合并同一季的并发请求，避免重复拉取
+  const inflight = seasonInflight.get(seasonId);
+  if (inflight) return inflight;
+
+  const p = (async () => {
+    const r = await fetchSeason({ season_id: seasonId });
+    const val = { type: r.type, episodes: normalizeEpisodes(r) };
+    seasonCache.set(seasonId, val);
+    return val;
+  })();
+  seasonInflight.set(seasonId, p);
+  try {
+    return await p;
+  } finally {
+    seasonInflight.delete(seasonId);
+  }
 }
 
 /** 按季收集剧集（第 1 集在最前） */
@@ -129,8 +144,8 @@ export async function collectGroups(
   return groups;
 }
 
-/** 把一集进度重置为 00:00（核心：心跳上报 last_play_progress_time=0） */
-export async function resetEpisode(ep: Episode, mixinKey: string): Promise<void> {
+/** 发送一次心跳，返回接口 code/message */
+async function sendHeartbeat(ep: Episode, mixinKey: string): Promise<{ code: number; message?: string }> {
   const dur = Math.max(0, Math.round((ep.duration || 0) / 1000));
   const startTs = Math.floor(Date.now() / 1000);
   const signed = wbiSign(
@@ -189,8 +204,20 @@ export async function resetEpisode(ep: Episode, mixinKey: string): Promise<void>
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   });
-  const j = await res.json();
-  if (j.code !== 0) throw new Error(`code=${j.code} ${j.message ?? ''}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j = await res.json().catch(() => null);
+  if (!j) throw new Error('心跳返回内容不是 JSON（可能被风控拦截）');
+  return { code: j.code, message: j.message };
+}
+
+/** 把一集进度重置为 00:00（核心：心跳上报 last_play_progress_time=0） */
+export async function resetEpisode(ep: Episode, mixinKey: string): Promise<void> {
+  let r = await sendHeartbeat(ep, mixinKey);
+  // WBI 签名失效（跨天/公钥轮换）：强制重取一次
+  if (r.code !== 0 && (r.code === -352 || r.code === -403)) {
+    r = await sendHeartbeat(ep, await getMixinKey(true));
+  }
+  if (r.code !== 0) throw new Error(`code=${r.code} ${r.message ?? ''}`);
 }
 
 /** 对选中的季执行重置：每季倒序下发，最后补发第 1 集使“上次播放”停在第 1 集 */
@@ -236,15 +263,28 @@ export async function runReset(
       await sleep(intervalMs);
     }
 
-    // 补发第 1 集，确保该季“上次播放” = 第 1 集
+    // 补发第 1 集，确保该季“上次播放” = 第 1 集（单集季已在上面发过，无需重复）
     const first = g.episodes[0];
     if (first) {
-      try {
-        await resetEpisode(first, mixinKey);
-        onProgress({ type: 'season-last', seasonTitle: g.title, title: first.title });
-      } catch {
-        fail++;
+      let lastOk = true;
+      if (g.episodes.length > 1) {
+        try {
+          await resetEpisode(first, mixinKey);
+        } catch (e) {
+          lastOk = false;
+          fail++;
+          onProgress({
+            type: 'item',
+            seasonTitle: g.title,
+            title: first.title,
+            ok: false,
+            error: e instanceof Error ? e.message : String(e),
+            index,
+            total,
+          });
+        }
       }
+      if (lastOk) onProgress({ type: 'season-last', seasonTitle: g.title, title: first.title });
     }
   }
 

@@ -174,8 +174,10 @@ const VIEW_CSS = `
 
   /* 卡片「⋯」菜单：关注 / 取关 / 拉黑 */
   .cmore { position: absolute; right: 5px; top: 5px; width: 26px; height: 26px; border: none; border-radius: 50%;
-    background: rgba(15,17,21,.55); color: #fff; display: none; align-items: center; justify-content: center; cursor: pointer; }
-  .card:hover .cmore, .mini:hover .cmore, .cmore:focus-visible { display: flex; }
+    background: rgba(15,17,21,.55); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
+    opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+  .card:hover .cmore, .card:focus-within .cmore, .mini:hover .cmore, .mini:focus-within .cmore, .cmore:focus-visible {
+    opacity: 1; pointer-events: auto; }
   .cmore:hover { background: rgba(15,17,21,.82); }
   .cmenu { position: fixed; z-index: 2147483600; min-width: 170px; background: #fff; border: 1px solid #eef0f2;
     border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.16); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
@@ -269,7 +271,7 @@ function ssSet(k: string, v: string): void {
 }
 
 function postSetting(key: string, value: unknown) {
-  window.postMessage({ __bpr: 'req', id: -Date.now(), cmd: 'setSetting', payload: { key, value } }, '*');
+  window.postMessage({ __bpr: 'req', id: -Date.now(), cmd: 'setSetting', payload: { key, value } }, location.origin);
 }
 
 function avatarEl(c: Card): HTMLElement {
@@ -353,7 +355,11 @@ export function createHome(): HomeController {
     };
     el.addEventListener('click', go);
     el.addEventListener('keydown', (e) => {
-      if ((e as KeyboardEvent).key === 'Enter') go();
+      const k = (e as KeyboardEvent).key;
+      if (k === 'Enter' || k === ' ') {
+        e.preventDefault();
+        go();
+      }
     });
 
     const thumb = document.createElement('div');
@@ -471,7 +477,11 @@ export function createHome(): HomeController {
     };
     el.addEventListener('click', go);
     el.addEventListener('keydown', (e) => {
-      if ((e as KeyboardEvent).key === 'Enter') go();
+      const k = (e as KeyboardEvent).key;
+      if (k === 'Enter' || k === ' ') {
+        e.preventDefault();
+        go();
+      }
     });
 
     const thumb = document.createElement('div');
@@ -620,6 +630,8 @@ export function createHome(): HomeController {
     const b = document.createElement('button');
     b.className = 'cmore';
     b.title = '关注 / 拉黑';
+    b.setAttribute('aria-haspopup', 'menu');
+    b.setAttribute('aria-label', '更多操作');
     b.innerHTML = iconSvg('more-vert', 16);
     b.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -807,6 +819,11 @@ export function createHome(): HomeController {
     if (titleEl) titleEl.textContent = '消息';
     if (countEl) countEl.textContent = '';
     contentEl.innerHTML = '';
+    const mst = states.get('message');
+    if (!msgItems.length && mst?.loading) {
+      contentEl.appendChild(stateEl('正在读取消息…', '稍候。'));
+      return;
+    }
     const counts = msgCounts ?? { reply: 0, at: 0, like: 0, sys: 0 };
     const labels: Record<string, string> = { reply: '回复我的', at: '@ 我的', like: '收到的赞', sys: '系统通知' };
     const strip = document.createElement('div');
@@ -878,13 +895,18 @@ export function createHome(): HomeController {
   }
   /* ---------------- 数据加载 ---------------- */
   async function loadSec(key: SecKey, reset: boolean) {
-    const s = states.get(key)!;
-    if (s.loading) return;
-    if (reset) states.set(key, newState());
     const st = states.get(key)!;
+    if (st.loading) return;
+    if (reset) {
+      // SWR：保留已有内容用于即时渲染，成功后再替换；仅重置分页游标
+      st.page = 1;
+      st.cursor = undefined;
+      st.hasMore = true;
+      st.error = '';
+    }
     st.loading = true;
-    st.error = '';
     if (key !== 'message' && key === sec) renderGrid(st);
+    if (key === 'message' && key === sec) renderMessages();
 
     try {
       if (key === 'recommend') {
@@ -900,8 +922,8 @@ export function createHome(): HomeController {
         st.hasMore = p.hasMore;
         st.cursor = p.cursor;
       } else if (key === 'toview') {
-        if (reset) st.items = await getWatchLater();
         st.hasMore = false;
+        if (reset) st.items = await getWatchLater();
       } else if (key === 'anime' || key === 'tv') {
         const seasonType = key === 'anime' ? 1 : 5; // 1=番剧(动画) 5=电视剧
         const followType = key === 'anime' ? 1 : 2; // 1=追番 2=追剧
@@ -929,8 +951,12 @@ export function createHome(): HomeController {
         st.cursor = p.next;
       } else if (key === 'message') {
         if (reset) {
-          msgCounts = await getMessageCounts().catch(() => null);
-          msgItems = await getMessages().catch(() => []);
+          const [counts, items] = await Promise.all([
+            getMessageCounts().catch(() => null),
+            getMessages().catch(() => []),
+          ]);
+          if (counts) msgCounts = counts; // 拉取失败时保留原角标，不清零
+          msgItems = items;
         }
       }
       st.loaded = true;
@@ -958,14 +984,13 @@ export function createHome(): HomeController {
     sh.querySelectorAll('[data-sec]').forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.sec === key));
     if (titleEl) titleEl.textContent = SECTIONS.find((x) => x.key === key)!.label;
     const st = states.get(key)!;
+    // 先用现有内容即时渲染，再后台刷新（SWR）；无内容时交给 loadSec 显示骨架屏
     if (key === 'message') {
-      if (!st.loaded && !st.loading) void loadSec(key, true);
-      else renderMessages();
-    } else if (!st.loaded && !st.loading) {
-      void loadSec(key, true);
-    } else {
+      if (st.loaded || msgItems.length) renderMessages();
+    } else if (st.loaded || st.items.length || st.follow.length) {
       renderGrid(st);
     }
+    if (!st.loading) void loadSec(key, true);
     // 不保留滚动：切栏和返回都回到顶部
     window.scrollTo(0, 0);
   }

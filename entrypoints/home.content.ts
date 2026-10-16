@@ -48,7 +48,7 @@ export default defineContentScript({
     };
 
     const requestSettings = (ms: number) =>
-      setTimeout(() => window.postMessage({ __bpr: 'req', id: -2, cmd: 'getSettings' }, '*'), ms);
+      setTimeout(() => window.postMessage({ __bpr: 'req', id: -2, cmd: 'getSettings' }, location.origin), ms);
 
     window.addEventListener('message', (ev: MessageEvent) => {
       if (ev.source !== window) return;
@@ -67,12 +67,21 @@ export default defineContentScript({
     };
     boot();
 
+    // SPA 路由变化：优先用 Navigation API（Chrome 102+），不支持时退化为低频轮询
     let lastHref = location.href;
-    setInterval(() => {
+    const onUrlChange = () => {
       if (location.href === lastHref) return;
       lastHref = location.href;
       boot();
       apply();
-    }, 600);
+    };
+    const navigation = (window as unknown as {
+      navigation?: { addEventListener?: (type: string, fn: () => void) => void };
+    }).navigation;
+    if (navigation?.addEventListener) {
+      navigation.addEventListener('navigate', () => setTimeout(onUrlChange, 0));
+    } else {
+      setInterval(onUrlChange, 800);
+    }
   },
 });

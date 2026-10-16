@@ -11,7 +11,10 @@ interface LogLine {
 
 class RpcClient {
   private seq = 0;
-  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  private pending = new Map<
+    number,
+    { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >();
   onProgress?: (p: ResetProgress) => void;
 
   constructor(private port: ReturnType<typeof browser.tabs.connect>) {
@@ -27,7 +30,10 @@ class RpcClient {
       }
     });
     port.onDisconnect.addListener(() => {
-      for (const p of this.pending.values()) p.reject(new Error('与页面的连接已断开，请刷新页面后重试'));
+      for (const p of this.pending.values()) {
+        clearTimeout(p.timer);
+        p.reject(new Error('与页面的连接已断开，请刷新页面后重试'));
+      }
       this.pending.clear();
     });
   }
@@ -35,7 +41,21 @@ class RpcClient {
   request<T>(cmd: string, payload?: unknown): Promise<T> {
     const id = ++this.seq;
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      // 主世界脚本在 document_idle 才注入，若请求早于它就绪会丢失，故加超时兜底
+      const timer = setTimeout(() => {
+        if (this.pending.delete(id)) reject(new Error('页面响应超时，请刷新 B 站页面后重试'));
+      }, 8000);
+      this.pending.set(id, {
+        timer,
+        resolve: (v) => {
+          clearTimeout(timer);
+          resolve(v as T);
+        },
+        reject: (e) => {
+          clearTimeout(timer);
+          reject(e);
+        },
+      });
       this.port.postMessage({ id, cmd, payload });
     });
   }
@@ -145,11 +165,18 @@ export default function App() {
 
   const run = async () => {
     if (!rpcRef.current || !info || running) return;
+    const seasonIds = effectiveSeasonIds();
+    if (
+      seasonIds.length > 1 &&
+      !window.confirm(`将重置 ${seasonIds.length} 季的全部剧集进度，确认继续？`)
+    ) {
+      return;
+    }
     setRunning(true);
     setLogs([]);
-    setProgress({ done: 0, total: info.episodes.length });
+    setProgress({ done: 0, total: allSeasons ? 0 : info.episodes.length });
     try {
-      await rpcRef.current.request('startReset', { seasonIds: effectiveSeasonIds() });
+      await rpcRef.current.request('startReset', { seasonIds });
     } catch (e) {
       appendLog('中断：' + (e instanceof Error ? e.message : String(e)), 'err');
     } finally {

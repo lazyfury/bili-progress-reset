@@ -14,7 +14,7 @@ export default defineContentScript({
   matches: ['https://www.bilibili.com/*'],
   runAt: 'document_start',
   main() {
-    const toMain = (msg: unknown) => window.postMessage(msg, '*');
+    const toMain = (msg: unknown) => window.postMessage(msg, location.origin);
 
     const pushSettings = async () => {
       const settings = await getSettings();
@@ -46,7 +46,7 @@ export default defineContentScript({
       if (d?.__bpr !== 'req') return;
       if (d.cmd === 'getSettings') {
         void pushSettings();
-      } else if (d.cmd === 'setSetting' && d.payload?.key) {
+      } else if (d.cmd === 'setSetting' && d.payload?.key && d.payload.key in DEFAULT_SETTINGS) {
         void browser.storage.local.set({ [d.payload.key]: d.payload.value });
       }
     });

@@ -1392,8 +1392,20 @@ export function createHome(): HomeController {
     if (!nav) return;
     nav.innerHTML = '';
     let lastGroup = '';
+    let pinnedDone = false;
+    const insertPinned = () => {
+      if (pinnedDone) return;
+      pinnedDone = true;
+      if (!pinned.length) return;
+      const g = document.createElement('div');
+      g.className = 'nav-group';
+      g.textContent = '已固定';
+      nav.appendChild(g);
+      pinned.forEach((p) => nav.appendChild(pinItem(p)));
+    };
     for (const s of SECTIONS) {
       if (s.group && s.group !== lastGroup) {
+        insertPinned(); // 已固定插在第一个分组（频道页）之前
         const g = document.createElement('div');
         g.className = 'nav-group';
         g.textContent = s.group;
@@ -1402,13 +1414,7 @@ export function createHome(): HomeController {
       }
       nav.appendChild(navItem(s.key, s.label, s.icon));
     }
-    if (pinned.length) {
-      const g = document.createElement('div');
-      g.className = 'nav-group';
-      g.textContent = '已固定';
-      nav.appendChild(g);
-      pinned.forEach((p) => nav.appendChild(pinItem(p)));
-    }
+    insertPinned(); // 无分组时兜底
     const add = document.createElement('button');
     add.className = 'nav-add';
     add.innerHTML = `<span class="ico">${iconSvg('open-in-new', 18)}</span><span>添加频道</span>`;

@@ -25,7 +25,6 @@ export default defineContentScript({
     let app: HomeMount | null = null;
     let pill: HTMLElement | null = null;
     let enabled = false;
-    let peek = false;
     let pinnedChannels: PinnedChannel[] = [];
 
     const postSetting = (key: string, value: unknown) =>
@@ -52,7 +51,7 @@ export default defineContentScript({
     };
 
     /* -------- mount / unmount -------- */
-    const props = () => ({ pinned: pinnedChannels, onExit, onHide });
+    const props = () => ({ pinned: pinnedChannels, onExit });
 
     const mountApp = () => {
       if (app || !isHome()) return;
@@ -77,18 +76,13 @@ export default defineContentScript({
     };
 
     const apply = () => {
-      if (enabled && !peek && isHome()) mountApp();
+      if (enabled && isHome()) mountApp();
       else unmountApp();
     };
 
     const onExit = () => {
       enabled = false;
-      peek = false;
       postSetting('homepageEnabled', false);
-      unmountApp();
-    };
-    const onHide = () => {
-      peek = true;
       unmountApp();
     };
 
@@ -96,7 +90,6 @@ export default defineContentScript({
       if (pill || !isHome() || !document.body) return;
       pill = createPill(() => {
         enabled = true;
-        peek = false;
         apply();
       });
       console.log('[bpr-home] pill 已注入');
@@ -132,7 +125,6 @@ export default defineContentScript({
     const onUrlChange = () => {
       if (location.href === lastHref) return;
       lastHref = location.href;
-      peek = false;
       boot();
       apply();
     };

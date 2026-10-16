@@ -511,8 +511,8 @@ function Sidebar() {
   );
 }
 
-function TopBar({ onHide }: { onHide: () => void }) {
-  const { sec, search, labelOf, doSearch, sections, onExit } = useStore();
+function TopBar() {
+  const { sec, search, labelOf, doSearch, sections } = useStore();
   const [kw, setKw] = useState(search);
   useEffect(() => setKw(search), [search]);
   const st = sections[sec];
@@ -537,12 +537,6 @@ function TopBar({ onHide }: { onHide: () => void }) {
           }
         }}
       />
-      <button className="tbtn" onClick={onHide}>
-        <span dangerouslySetInnerHTML={{ __html: iconSvg('open-in-new', 15) }} /> 打开 B 站
-      </button>
-      <button className="tbtn" onClick={onExit}>
-        <span dangerouslySetInnerHTML={{ __html: iconSvg('arrow-back', 15) }} /> 还原首页
-      </button>
     </div>
   );
 }
@@ -724,10 +718,9 @@ function SectionContent() {
 export interface HomeAppProps {
   pinned: PinnedChannel[];
   onExit: () => void;
-  onHide: () => void;
 }
 
-export function HomeApp({ pinned, onExit, onHide }: HomeAppProps) {
+export function HomeApp({ pinned, onExit }: HomeAppProps) {
   const store = useHomeStore(pinned, onExit);
   return (
     <StoreProvider value={store}>
@@ -735,7 +728,7 @@ export function HomeApp({ pinned, onExit, onHide }: HomeAppProps) {
       <div className="app">
         <Sidebar />
         <main className="main">
-          <TopBar onHide={onHide} />
+          <TopBar />
           <Chips />
           <div className="content">
             <SectionContent />

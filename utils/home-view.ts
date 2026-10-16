@@ -38,17 +38,17 @@ type SecKey =
   | 'history'
   | 'message';
 
-const SECTIONS: { key: SecKey; label: string; icon: string }[] = [
+const SECTIONS: { key: SecKey; label: string; icon: string; group?: string }[] = [
   { key: 'recommend', label: '推荐', icon: 'recommend' },
   { key: 'follow', label: '关注', icon: 'subscriptions' },
   { key: 'toview', label: '稍后再看', icon: 'schedule' },
-  { key: 'anime', label: '动画', icon: 'movie' },
-  { key: 'tv', label: '电视剧', icon: 'live-tv' },
-  { key: 'doc', label: '纪录片', icon: 'videocam' },
-  { key: 'movie', label: '电影', icon: 'theaters' },
-  { key: 'game', label: '游戏', icon: 'sports-esports' },
-  { key: 'history', label: '历史记录', icon: 'history' },
-  { key: 'message', label: '消息', icon: 'notifications' },
+  { key: 'anime', label: '动画', icon: 'movie', group: '频道页' },
+  { key: 'tv', label: '电视剧', icon: 'live-tv', group: '频道页' },
+  { key: 'doc', label: '纪录片', icon: 'videocam', group: '频道页' },
+  { key: 'movie', label: '电影', icon: 'theaters', group: '频道页' },
+  { key: 'game', label: '游戏', icon: 'sports-esports', group: '频道页' },
+  { key: 'history', label: '历史记录', icon: 'history', group: '个人中心' },
+  { key: 'message', label: '消息', icon: 'notifications', group: '个人中心' },
 ];
 
 /**
@@ -87,6 +87,7 @@ const VIEW_CSS = `
   .brand .mark { width: 22px; height: 22px; border-radius: 7px; background: #fb7299; color: #fff;
     display: flex; align-items: center; justify-content: center; }
   .nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav-group { margin: 16px 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: .4px; color: #9aa0a8; }
   .nav button { position: relative; display: flex; align-items: center; gap: 13px; width: 100%;
     border: none; background: transparent; color: #3d4148; font-size: 13.5px; line-height: 1;
     padding: 0 12px; height: 40px; border-radius: 8px; cursor: pointer; text-align: left; }
@@ -1113,7 +1114,15 @@ export function createHome(): HomeController {
       </div>`;
 
     const nav = sh!.querySelector('.nav') as HTMLElement;
+    let lastGroup = '';
     for (const s of SECTIONS) {
+      if (s.group && s.group !== lastGroup) {
+        const g = document.createElement('div');
+        g.className = 'nav-group';
+        g.textContent = s.group;
+        nav.appendChild(g);
+        lastGroup = s.group;
+      }
       const b = document.createElement('button');
       b.dataset.sec = s.key;
       b.innerHTML = `<span class="ico">${iconSvg(s.icon, 20)}</span><span>${s.label}</span><span class="badge" style="display:none"></span>`;

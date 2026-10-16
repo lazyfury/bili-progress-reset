@@ -7,6 +7,7 @@ import {
   getBangumiFollow,
   getBangumiIndex,
   getFollowFeed,
+  getGameFeed,
   getHistory,
   getMessageCounts,
   getMessages,
@@ -24,7 +25,17 @@ import {
 
 const TAG = '[bpr-home]';
 
-type SecKey = 'recommend' | 'follow' | 'toview' | 'anime' | 'tv' | 'history' | 'message';
+type SecKey =
+  | 'recommend'
+  | 'follow'
+  | 'toview'
+  | 'anime'
+  | 'tv'
+  | 'doc'
+  | 'movie'
+  | 'game'
+  | 'history'
+  | 'message';
 
 const SECTIONS: { key: SecKey; label: string; icon: string }[] = [
   { key: 'recommend', label: '推荐', icon: 'recommend' },
@@ -32,9 +43,24 @@ const SECTIONS: { key: SecKey; label: string; icon: string }[] = [
   { key: 'toview', label: '稍后再看', icon: 'schedule' },
   { key: 'anime', label: '动画', icon: 'movie' },
   { key: 'tv', label: '电视剧', icon: 'live-tv' },
+  { key: 'doc', label: '纪录片', icon: 'videocam' },
+  { key: 'movie', label: '电影', icon: 'theaters' },
+  { key: 'game', label: '游戏', icon: 'sports-esports' },
   { key: 'history', label: '历史记录', icon: 'history' },
   { key: 'message', label: '消息', icon: 'notifications' },
 ];
+
+/**
+ * PGC 频道配置。
+ * seasonType 见 `pgc/season/index/result`；followType 见 `x/space/bangumi/follow/list`
+ * （该接口只接受 1=番剧 / 2=电视剧，故纪录片/电影不做“追”列表）。
+ */
+const PGC: Partial<Record<SecKey, { seasonType: number; followType?: 1 | 2; followTitle?: string }>> = {
+  anime: { seasonType: 1, followType: 1, followTitle: '我的追番' },
+  tv: { seasonType: 5, followType: 2, followTitle: '我的追剧' },
+  doc: { seasonType: 3 },
+  movie: { seasonType: 2 },
+};
 
 /* ------------------------- 设计令牌 -------------------------
  * 画布白 + 墨黑文字 + 品牌粉作唯一强调色；用细线而非卡片阴影；
@@ -514,7 +540,7 @@ export function createHome(): HomeController {
     const head = document.createElement('div');
     head.className = 'follow-head';
     const h = document.createElement('h3');
-    h.textContent = sec === 'anime' ? '我的追番' : '我的追剧';
+    h.textContent = PGC[sec]?.followTitle ?? '我的追番';
     head.appendChild(h);
     const upd = st.follow.filter((c) => c.pinned).length;
     if (upd) {
@@ -571,7 +597,7 @@ export function createHome(): HomeController {
       return;
     }
 
-    if ((sec === 'anime' || sec === 'tv') && st.follow.length) {
+    if (PGC[sec]?.followType && st.follow.length) {
       contentEl.appendChild(followBlock(st));
     }
 
@@ -924,24 +950,37 @@ export function createHome(): HomeController {
       } else if (key === 'toview') {
         st.hasMore = false;
         if (reset) st.items = await getWatchLater();
-      } else if (key === 'anime' || key === 'tv') {
-        const seasonType = key === 'anime' ? 1 : 5; // 1=番剧(动画) 5=电视剧
-        const followType = key === 'anime' ? 1 : 2; // 1=追番 2=追剧
+      } else if (PGC[key]) {
+        const cfg = PGC[key]!;
         if (reset) {
-          const [follow, idx] = await Promise.all([
-            getBangumiFollow(followType as 1 | 2).catch(() => ({ items: [] as Card[], hasMore: false })),
-            getBangumiIndex(seasonType, 1),
-          ]);
-          // 我的追番/追剧单独一排置顶；items 只放频道内容
-          st.follow = follow.items;
-          st.items = idx.items;
-          st.hasMore = idx.hasMore;
+          const idxP = getBangumiIndex(cfg.seasonType, 1);
+          if (cfg.followType) {
+            // 我的追番/追剧单独一排置顶；items 只放频道内容
+            const [follow, idx] = await Promise.all([
+              getBangumiFollow(cfg.followType, 1).catch(() => ({ items: [] as Card[], hasMore: false })),
+              idxP,
+            ]);
+            st.follow = follow.items;
+            st.items = idx.items;
+            st.hasMore = idx.hasMore;
+          } else {
+            const idx = await idxP;
+            st.follow = [];
+            st.items = idx.items;
+            st.hasMore = idx.hasMore;
+          }
           st.page = 2;
         } else {
-          const idx = await getBangumiIndex(seasonType, st.page);
+          const idx = await getBangumiIndex(cfg.seasonType, st.page);
           st.items.push(...idx.items);
           st.hasMore = idx.hasMore;
           st.page += 1;
+        }
+      } else if (key === 'game') {
+        if (reset) {
+          const p = await getGameFeed();
+          st.items = p.items;
+          st.hasMore = false;
         }
       } else if (key === 'history') {
         const p = await getHistory(reset ? undefined : (st.cursor as HistoryCursor | undefined));

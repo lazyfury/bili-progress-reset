@@ -292,6 +292,27 @@ export async function getBangumiIndex(seasonType: number, page = 1): Promise<Pag
   return { items, hasMore: !!d.has_next, total: d.total ?? 0 };
 }
 
+/* ============================ 游戏区（排行榜，rid=4；该接口不可翻页） ============================ */
+export async function getGameFeed(): Promise<Page<Card>> {
+  const j = await getJson('https://api.bilibili.com/x/web-interface/ranking/v2?rid=4&type=all');
+  assertOk(j, '游戏区读取失败');
+  const list = ((j.data?.list ?? []) as any[]).slice(0, 30);
+  const items: Card[] = list.map((v) => ({
+    id: v.bvid,
+    url: `https://www.bilibili.com/video/${v.bvid}`,
+    cover: https(v.pic),
+    title: v.title ?? '',
+    up: v.owner?.name ?? '',
+    upFace: https(v.owner?.face),
+    mid: v.owner?.mid ? Number(v.owner.mid) : undefined,
+    aid: v.aid ? Number(v.aid) : undefined,
+    cid: v.cid ? Number(v.cid) : undefined,
+    right: v.stat?.view != null ? `${fmtCount(v.stat.view)}播放` : '',
+    duration: v.duration ?? 0,
+  }));
+  return { items, hasMore: false };
+}
+
 /* ============================ 历史记录（游标翻页） ============================ */
 export interface HistoryCursor {
   max: number;

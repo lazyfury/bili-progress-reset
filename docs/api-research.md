@@ -162,8 +162,9 @@ UGC 进度上报用 `heartbeat` 的 `type=3`（与 PGC 的 `type=4` 不同），
 | 关注动态（视频） | `x/polymer/web-dynamic/v1/feed/all?type=video` | `offset` 翻页 |
 | 首页推荐 | `x/web-interface/wbi/index/top/feed/rcmd` | WBI，`fresh_idx` 翻页 |
 | 稍后再看 | `x/v2/history/toview` | 无 |
-| 追番 / 追剧 | `x/space/bangumi/follow/list?type=1|2&follow_type=1&vmid=<mid>` | `pn` 翻页 |
-| 动画 / 电视剧频道 | `pgc/season/index/result?season_type=1|5` | `page` 翻页（同 `/anime/`、`/tv/`） |
+| 追番 / 追剧 | `x/space/bangumi/follow/list?type=1|2&follow_type=1&vmid=<mid>` | `pn` 翻页（仅 `type=1/2`） |
+| 动画 / 电视剧 / 纪录片 / 电影频道 | `pgc/season/index/result?season_type=1|5|3|2` | `page` 翻页（同 `/anime/`、`/tv/` 等） |
+| 游戏区排行 | `x/web-interface/ranking/v2?rid=4&type=all` | 无（不可翻页） |
 | 历史记录 | `x/web-interface/history/cursor` | `max` / `view_at` 游标 |
 | 消息数 | `x/msgfeed/unread` | 无 |
 | 消息列表 | `x/msgfeed/reply`、`x/msgfeed/at`、`x/msgfeed/like` | `pn`/`ps` |

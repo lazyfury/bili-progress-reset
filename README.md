@@ -81,16 +81,20 @@ npm run zip        # 打包发布 zip
 
 | 栏目 | 接口 | 分页 |
 |---|---|---|
-| **关注**（默认） | `x/polymer/web-dynamic/v1/feed/all?type=video` | offset 翻页 |
 | **推荐** | `x/web-interface/wbi/index/top/feed/rcmd`（需 WBI） | `fresh_idx` 翻页 |
+| **关注** | `x/polymer/web-dynamic/v1/feed/all?type=video` | offset 翻页 |
 | 稍后再看 | `x/v2/history/toview` | 无 |
 | 动画 | `pgc/season/index/result?season_type=1`（同 `/anime/`） | page 翻页 |
 | 电视剧 | `pgc/season/index/result?season_type=5`（同 `/tv/`） | page 翻页 |
+| 纪录片 | `pgc/season/index/result?season_type=3`（同 `/documentary/`） | page 翻页 |
+| 电影 | `pgc/season/index/result?season_type=2`（同 `/movie/`） | page 翻页 |
+| 游戏 | `x/web-interface/ranking/v2?rid=4&type=all`（游戏区排行） | 无 |
 | 历史记录 | `x/web-interface/history/cursor` | `max`/`view_at` 游标 |
 | 消息 | `x/msgfeed/unread` + `reply/at/like` | 未读角标 + 最近消息 |
 
-> 「动画 / 电视剧」展示的是**官方频道内容**（与 `/anime/`、`/tv/` 落地页同源），
-> 并把你的**追番 / 追剧单独做成一排**放在顶部：默认一行横向滚动，点「展开全部」换行铺开；
+> 「动画 / 电视剧 / 纪录片 / 电影」展示的是**官方频道内容**（与 `/anime/`、`/tv/` 等落地页同源），
+> 其中「动画 / 电视剧」把你的**追番 / 追剧单独做成一排**放在顶部（`space/bangumi/follow/list` 仅支持 `type=1/2`，
+> 纪录片/电影无此排）：默认一行横向滚动，点「展开全部」换行铺开；
 > 标题旁有「N 部有更新」badge（有更新的项用粉色角标）。未登录时追番/追剧拉不到，仅显示频道内容。
 > 封面右上角显示评分（`score`）。
 

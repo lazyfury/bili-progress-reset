@@ -120,6 +120,37 @@ export async function getSelfMid(): Promise<number> {
   return _mid;
 }
 
+/* ============================ 个人中心 ============================ */
+export interface ProfileData {
+  mid: number;
+  name: string;
+  face: string;
+  level: number;
+  vip: boolean;
+  vipLabel?: string;
+  following: number;
+  follower: number;
+}
+
+export async function getSelfProfile(): Promise<ProfileData> {
+  const nav = await getJson('https://api.bilibili.com/x/web-interface/nav');
+  assertOk(nav, '获取账号信息失败');
+  const mid = Number(nav.data?.mid);
+  if (!mid) throw new Error('未登录');
+  _mid = mid;
+  const rel = await getJson(`https://api.bilibili.com/x/relation/stat?vmid=${mid}`).catch(() => null);
+  return {
+    mid,
+    name: nav.data?.uname ?? '',
+    face: https(nav.data?.face),
+    level: nav.data?.level_info?.current_level ?? 0,
+    vip: !!nav.data?.vipStatus,
+    vipLabel: nav.data?.vip_label?.text || undefined,
+    following: rel?.data?.following ?? 0,
+    follower: rel?.data?.follower ?? 0,
+  };
+}
+
 /* ============================ 关注的新视频（可翻页） ============================ */
 export async function getFollowFeed(offset?: string): Promise<Page<Card>> {
   const q = new URLSearchParams({ type: 'video', timezone_offset: '-480' });

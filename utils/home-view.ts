@@ -14,6 +14,7 @@ import {
   getMessages,
   getRecommend,
   getRelationAttrs,
+  getSelfProfile,
   getTimeline,
   getWatchLater,
   modifyRelation,
@@ -23,6 +24,7 @@ import {
   type HistoryCursor,
   type MsgCounts,
   type MsgItem,
+  type ProfileData,
   type TimelineDay,
 } from './home';
 
@@ -38,7 +40,8 @@ type SecKey =
   | 'movie'
   | 'game'
   | 'history'
-  | 'message';
+  | 'message'
+  | 'profile';
 
 const SECTIONS: { key: SecKey; label: string; icon: string; group?: string }[] = [
   { key: 'recommend', label: '推荐', icon: 'recommend' },
@@ -49,8 +52,9 @@ const SECTIONS: { key: SecKey; label: string; icon: string; group?: string }[] =
   { key: 'doc', label: '纪录片', icon: 'videocam', group: '频道页' },
   { key: 'movie', label: '电影', icon: 'theaters', group: '频道页' },
   { key: 'game', label: '游戏', icon: 'sports-esports', group: '频道页' },
-  { key: 'history', label: '历史记录', icon: 'history', group: '个人中心' },
-  { key: 'message', label: '消息', icon: 'notifications', group: '个人中心' },
+  { key: 'profile', label: '个人中心', icon: 'account-circle', group: '我的' },
+  { key: 'history', label: '历史记录', icon: 'history', group: '我的' },
+  { key: 'message', label: '消息', icon: 'notifications', group: '我的' },
 ];
 
 /**
@@ -249,6 +253,22 @@ const VIEW_CSS = `
   .mrow .mi { flex: 0 0 20px; color: #9aa0a8; padding-top: 2px; }
   .mrow .mt { font-size: 13px; color: #0f1115; margin-bottom: 3px; }
   .mrow .md { font-size: 12px; color: #7c828c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 个人中心 */
+  .profile { display: flex; align-items: center; gap: 16px; padding: 22px 0 6px; }
+  .pav { width: 72px; height: 72px; flex: 0 0 72px; border-radius: 50%; overflow: hidden; background: #eceef1; }
+  .pav img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pname { font-size: 20px; font-weight: 650; letter-spacing: -.2px; }
+  .pmeta { display: flex; gap: 8px; margin-top: 7px; }
+  .pmeta .lv { font-size: 11px; font-weight: 700; color: #fff; background: #fb7299; border-radius: 4px; padding: 2px 7px; }
+  .pmeta .vip { font-size: 11px; font-weight: 700; color: #7a4a00; border-radius: 4px; padding: 2px 7px;
+    background: linear-gradient(90deg, #ffe6a8, #ffcf6b); }
+  .pstats { display: flex; gap: 44px; margin: 18px 0 6px; padding: 16px 0; border-top: 1px solid #eef0f2; border-bottom: 1px solid #eef0f2; }
+  .pstat .n { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .pstat .l { font-size: 12px; color: #7c828c; margin-top: 2px; }
+  .plinks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .plink { font-size: 13px; color: #3d4148; text-decoration: none; background: #f5f6f8; border-radius: 8px; padding: 9px 14px; }
+  .plink:hover { background: #eceef1; color: #0f1115; }
 `;
 
 const PILL_CSS = `
@@ -364,6 +384,7 @@ export function createHome(): HomeController {
   let states = new Map<SecKey, SecState>();
   let msgCounts: MsgCounts | null = null;
   let msgItems: MsgItem[] = [];
+  let profile: ProfileData | null = null;
   const expanded = new Set<string>();
   /** mid -> relation.attribute（0 未关注 / 1 悄悄 / 2 单向 / 6 互关 / 128 拉黑） */
   const relations = new Map<number, number>();
@@ -996,6 +1017,88 @@ export function createHome(): HomeController {
     contentEl.appendChild(list);
   }
 
+  function renderProfile() {
+    if (!contentEl) return;
+    if (titleEl) titleEl.textContent = '个人中心';
+    if (countEl) countEl.textContent = '';
+    contentEl.innerHTML = '';
+    const st = states.get('profile');
+    if (!profile) {
+      contentEl.appendChild(
+        st?.loading
+          ? stateEl('正在读取账号信息…', '稍候。')
+          : stateEl('还没登录 B 站', '登录后就能看到你的账号信息。', {
+              label: '去登录',
+              onClick: () => (location.href = 'https://passport.bilibili.com/login'),
+            }),
+      );
+      return;
+    }
+    const p = profile;
+    const card = document.createElement('div');
+    card.className = 'profile';
+    const av = document.createElement('div');
+    av.className = 'pav';
+    if (p.face) {
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.src = p.face;
+      av.appendChild(img);
+    }
+    const info = document.createElement('div');
+    const nm = document.createElement('div');
+    nm.className = 'pname';
+    nm.textContent = p.name || '未登录';
+    const meta = document.createElement('div');
+    meta.className = 'pmeta';
+    const lv = document.createElement('span');
+    lv.className = 'lv';
+    lv.textContent = `LV${p.level}`;
+    meta.appendChild(lv);
+    if (p.vip) {
+      const vip = document.createElement('span');
+      vip.className = 'vip';
+      vip.textContent = p.vipLabel || '大会员';
+      meta.appendChild(vip);
+    }
+    info.append(nm, meta);
+    card.append(av, info);
+
+    const stats = document.createElement('div');
+    stats.className = 'pstats';
+    ([['关注', p.following], ['粉丝', p.follower]] as [string, number][]).forEach(([l, n]) => {
+      const c = document.createElement('div');
+      c.className = 'pstat';
+      const nEl = document.createElement('div');
+      nEl.className = 'n';
+      nEl.textContent = fmtCount(n);
+      const lEl = document.createElement('div');
+      lEl.className = 'l';
+      lEl.textContent = l;
+      c.append(nEl, lEl);
+      stats.appendChild(c);
+    });
+
+    const links = document.createElement('div');
+    links.className = 'plinks';
+    const go = (label: string, url: string) => {
+      const a = document.createElement('a');
+      a.className = 'plink';
+      a.href = url;
+      a.textContent = label;
+      links.appendChild(a);
+    };
+    go('我的空间', `https://space.bilibili.com/${p.mid}`);
+    go('我的动态', 'https://t.bilibili.com/');
+    go('我的收藏', `https://space.bilibili.com/${p.mid}/favlist`);
+    go('关注列表', `https://space.bilibili.com/${p.mid}/fans/follow`);
+    go('观看历史', 'https://www.bilibili.com/account/history');
+    go('稍后再看', 'https://www.bilibili.com/watchlater/');
+
+    contentEl.append(card, stats, links);
+  }
+
   /* ---------------- 持久化 ---------------- */
   function saveCache(key: SecKey) {
     const st = states.get(key);
@@ -1030,8 +1133,11 @@ export function createHome(): HomeController {
       st.error = '';
     }
     st.loading = true;
-    if (key !== 'message' && key === sec) renderGrid(st);
-    if (key === 'message' && key === sec) renderMessages();
+    if (key === sec) {
+      if (key === 'message') renderMessages();
+      else if (key === 'profile') renderProfile();
+      else renderGrid(st);
+    }
 
     try {
       if (key === 'recommend') {
@@ -1105,6 +1211,8 @@ export function createHome(): HomeController {
           if (counts) msgCounts = counts; // 拉取失败时保留原角标，不清零
           msgItems = items;
         }
+      } else if (key === 'profile') {
+        if (reset) profile = await getSelfProfile();
       }
       st.loaded = true;
       saveCache(key);
@@ -1118,6 +1226,8 @@ export function createHome(): HomeController {
     if (key === 'message') {
       updateBadge();
       if (key === sec) renderMessages();
+    } else if (key === 'profile') {
+      if (key === sec) renderProfile();
     } else {
       void loadRelations([...st.follow, ...st.items]);
       if (key === sec) renderGrid(st);
@@ -1134,6 +1244,8 @@ export function createHome(): HomeController {
     // 先用现有内容即时渲染，再后台刷新（SWR）；无内容时交给 loadSec 显示骨架屏
     if (key === 'message') {
       if (st.loaded || msgItems.length) renderMessages();
+    } else if (key === 'profile') {
+      if (st.loaded || profile) renderProfile();
     } else if (st.loaded || st.items.length || st.follow.length) {
       renderGrid(st);
     }

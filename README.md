@@ -77,7 +77,7 @@ npm run zip        # 打包发布 zip
 
 把 B 站首页信息流替换成一个 **YouTube 风格的自定义首页**：左侧栏 + 视频网格。
 
-侧栏分三组：**推荐 / 关注 / 稍后再看** · **频道页**（动画/电视剧/纪录片/电影/游戏）· **个人中心**（历史记录/消息）。
+侧栏分三组：**推荐 / 关注 / 稍后再看** · **频道页**（动画/电视剧/纪录片/电影/游戏）· **我的**（个人中心/历史记录/消息）。
 
 栏目（全部只读，复用登录 Cookie）：
 
@@ -91,6 +91,7 @@ npm run zip        # 打包发布 zip
 | 纪录片 | `pgc/season/index/result?season_type=3`（同 `/documentary/`） | page 翻页 |
 | 电影 | `pgc/season/index/result?season_type=2`（同 `/movie/`） | page 翻页 |
 | 游戏 | `x/web-interface/ranking/v2?rid=4&type=all`（游戏区排行） | 无 |
+| 个人中心 | `x/web-interface/nav` + `x/relation/stat` | 无（账号资料 + 快捷入口） |
 | 历史记录 | `x/web-interface/history/cursor` | `max`/`view_at` 游标 |
 | 消息 | `x/msgfeed/unread` + `reply/at/like` | 未读角标 + 最近消息 |
 
